@@ -7,12 +7,17 @@ import pandas as pd
 import numpy as np
 from google import genai
 
-# 1. Retrieve API Secrets from Environment
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "8857375031")
+# 1. Retrieve Secrets from GitHub Environment
+GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "8857375031").strip()
 
-# 2. Portfolio & Watchlist Profiles
+if not GEMINI_KEY:
+    raise ValueError("Missing GEMINI_API_KEY repository secret.")
+if not TELEGRAM_BOT_TOKEN:
+    raise ValueError("Missing TELEGRAM_BOT_TOKEN repository secret.")
+
+# 2. Institutional Portfolio & Watchlist
 PORTFOLIO_HOLDINGS = [
     {
         "ticker": "EQNR.OL",
@@ -117,6 +122,7 @@ def run_pipeline():
     print("[*] Ingesting macro barometers...")
     macro_data = fetch_macro_benchmarks()
 
+    print("[*] Fetching equity metrics...")
     portfolio_metrics = [analyze_ticker(item['ticker']) for item in PORTFOLIO_HOLDINGS]
     watchlist_metrics = [analyze_ticker(item['ticker']) for item in WATCHLIST_TARGETS]
 
@@ -154,46 +160,67 @@ Output strictly valid JSON with this exact structure:
 }}
 """
 
-    print("[*] Synthesizing signals with Gemini...")
-    res = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-    raw = res.text.strip()
-    match = re.search(r'\\{.*\\}', raw, re.DOTALL)
+    print("[*] Synthesizing signals via Gemini...")
+    candidate_models = ["gemini-3.6-flash", "gemini-2.0-flash", "gemini-2.5-pro"]
+    response = None
+
+    for model_name in candidate_models:
+        try:
+            print(f"[*] Querying model: {model_name}...")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
+            if response and response.text:
+                print(f"[+] Connected to {model_name}")
+                break
+        except Exception as e:
+            print(f"[-] {model_name} skipped: {e}")
+
+    if not response or not response.text:
+        raise RuntimeError("Failed to generate signals from all Gemini model endpoints.")
+
+    raw = response.text.strip()
+    match = re.search(r'\{.*\}', raw, re.DOTALL)
     signals = json.loads(match.group(0)) if match else json.loads(raw)
 
-    # Format Telegram Dispatch
+    # Format Telegram Card
     brent = macro_data.get("BRENT_CRUDE_USD", {}).get("current", "N/A")
     brent_chg = macro_data.get("BRENT_CRUDE_USD", {}).get("change_pct_1d", 0)
     usdnok = macro_data.get("USD_NOK", {}).get("current", "N/A")
     yield_10y = macro_data.get("US_10Y_YIELD_PCT", {}).get("current", "N/A")
 
-    msg = "🏛 <b>MarketCatalyst AI | Automated Cloud Dispatch</b>\\n"
-    msg += f"📊 <i>Macro: Brent ${brent} ({brent_chg:+.1f}%) | USD/NOK {usdnok} | US 10Y {yield_10y}%</i>\\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━\\n\\n"
-    msg += f"🌐 <b>Macro Regime:</b>\\n{signals.get('macro_regime_summary', 'N/A')}\\n\\n"
+    msg = "🏛 <b>MarketCatalyst AI | Automated Cloud Dispatch</b>\n"
+    msg += f"📊 <i>Macro: Brent ${brent} ({brent_chg:+.1f}%) | USD/NOK {usdnok} | US 10Y {yield_10y}%</i>\n"
+    msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
+    msg += f"🌐 <b>Macro Regime:</b>\n{signals.get('macro_regime_summary', 'N/A')}\n\n"
 
-    msg += "💼 <b>PORTFOLIO HOLDINGS:</b>\\n"
+    msg += "💼 <b>PORTFOLIO HOLDINGS:</b>\n"
     for item in signals.get('portfolio_signals', []):
         sig = item.get('signal', '')
         icon = "🟢" if "ACCUMULATE" in sig else ("🔴" if "TRIM" in sig or "EXIT" in sig else "🟡")
-        msg += f"{icon} <b>{item.get('ticker')}</b>: <code>{sig}</code> (Score: {item.get('conviction_score', 0):+.2f})\\n"
-        msg += f"• <b>Driver:</b> {item.get('catalyst_breakdown', 'N/A')}\\n"
-        msg += f"• <b>Action:</b> {item.get('actionable_trigger', 'N/A')}\\n\\n"
+        msg += f"{icon} <b>{item.get('ticker')}</b>: <code>{sig}</code> (Score: {item.get('conviction_score', 0):+.2f})\n"
+        msg += f"• <b>Driver:</b> {item.get('catalyst_breakdown', 'N/A')}\n"
+        msg += f"• <b>Action:</b> {item.get('actionable_trigger', 'N/A')}\n\n"
 
-    msg += "🎯 <b>WATCHLIST TARGETS:</b>\\n"
+    msg += "🎯 <b>WATCHLIST TARGETS:</b>\n"
     for item in signals.get('watchlist_signals', []):
         sig = item.get('signal', '')
         icon = "🔵" if "BUY" in sig or "SCALE" in sig else "⚪"
-        msg += f"{icon} <b>{item.get('ticker')}</b>: <code>{sig}</code> (Score: {item.get('conviction_score', 0):+.2f})\\n"
-        msg += f"• <b>Setup:</b> {item.get('catalyst_breakdown', 'N/A')}\\n"
-        msg += f"• <b>Trigger:</b> {item.get('actionable_trigger', 'N/A')}\\n\\n"
+        msg += f"{icon} <b>{item.get('ticker')}</b>: <code>{sig}</code> (Score: {item.get('conviction_score', 0):+.2f})\n"
+        msg += f"• <b>Setup:</b> {item.get('catalyst_breakdown', 'N/A')}\n"
+        msg += f"• <b>Trigger:</b> {item.get('actionable_trigger', 'N/A')}\n\n"
 
-    msg += "━━━━━━━━━━━━━━━━━━━━\\n⚡ <i>MarketCatalyst AI Cloud Runner</i>"
+    msg += "━━━━━━━━━━━━━━━━━━━━\n⚡ <i>MarketCatalyst AI Cloud Runner</i>"
 
-    requests.post(
+    res = requests.post(
         f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
         json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"}
     )
-    print("[+] Automated dispatch successfully delivered to Telegram.")
+    if res.status_code == 200:
+        print("[+] Automated dispatch successfully delivered to Telegram.")
+    else:
+        print(f"[!] Telegram delivery failed ({res.status_code}): {res.text}")
 
 if __name__ == '__main__':
     run_pipeline()
