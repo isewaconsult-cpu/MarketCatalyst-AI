@@ -1,0 +1,31 @@
+name: MarketCatalyst AI Scheduled Runner
+
+on:
+  schedule:
+    - cron: '30 7 * * 1-5'   # OSEBX Morning Scan (08:30 CET / Monday-Friday)
+    - cron: '0 14 * * 1-5'   # US Pre-Market Scan (15:00 CET / Monday-Friday)
+    - cron: '0 21 * * 1-5'   # US Market Close Summary (22:00 CET / Monday-Friday)
+  workflow_dispatch:         # Enables manual 1-click runs anytime
+
+jobs:
+  run-catalyst:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install yfinance google-genai requests pandas numpy
+
+      - name: Execute Catalyst Engine
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python catalyst_engine.py
