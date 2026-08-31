@@ -1,7 +1,9 @@
 import datetime
+import math
 import os
 import re
 from google import genai
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -15,7 +17,7 @@ GEMINI_API_KEY = st.secrets.get(
 ).strip()
 
 st.set_page_config(
-    page_title="IsewaInvest | Institutional Equity Intelligence",
+    page_title="IsewaInvest | Institutional Equity Terminal",
     page_icon="🏛️",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -34,12 +36,6 @@ st.markdown(
         border: 1px solid #1F2937;
         border-radius: 12px;
         padding: 20px;
-    }
-    .metric-card {
-        background: #161B22;
-        border: 1px solid #30363D;
-        border-radius: 10px;
-        padding: 14px;
     }
 </style>
 """,
@@ -64,12 +60,105 @@ with col_title:
   )
   st.markdown(
       "<p style='color:#94A3B8; font-size:13px; margin-top:2px;'>Institutional"
-      " Equity Research & Consensus Intelligence &bull; Oslo Børs (OSEBX) &amp;"
-      " US Equities (S&amp;P 500 / NASDAQ)</p>",
+      " Equity Research & Dynamic Telemetry &bull; Oslo Børs (OSEBX) &amp; US"
+      " Equities</p>",
       unsafe_allow_html=True,
   )
 
-# Search Form Container
+
+def build_needle_gauge(score, label_text):
+  """Builds a semi-circular speedometer with a true physical needle pointer."""
+  # Clamp score between 1.0 (Strong Sell) and 5.0 (Strong Buy)
+  score = max(1.0, min(5.0, float(score)))
+
+  # Angle calculation: 1.0 -> 180 deg (pi rad), 5.0 -> 0 deg (0 rad)
+  theta_deg = 180.0 - ((score - 1.0) / 4.0) * 180.0
+  theta_rad = math.radians(theta_deg)
+
+  # Needle coordinates from center (0.5, 0.15)
+  cx, cy = 0.5, 0.15
+  r = 0.35
+  nx = cx + r * math.cos(theta_rad)
+  ny = cy + r * math.sin(theta_rad)
+
+  fig = go.Figure()
+
+  # Background Gauge Arc
+  fig.add_trace(
+      go.Indicator(
+          mode="gauge",
+          value=score,
+          domain={"x": [0, 1], "y": [0, 1]},
+          gauge={
+              "axis": {
+                  "range": [1, 5],
+                  "tickvals": [1, 2, 3, 4, 5],
+                  "ticktext": [
+                      "Strong Sell",
+                      "Sell",
+                      "Hold",
+                      "Buy",
+                      "Strong Buy",
+                  ],
+                  "tickcolor": "#94A3B8",
+                  "tickfont": {"size": 10, "color": "#94A3B8"},
+              },
+              "bar": {"color": "rgba(0,0,0,0)"},  # Invisible bar
+              "bgcolor": "#161B22",
+              "borderwidth": 0,
+              "steps": [
+                  {"range": [1, 2], "color": "#DC2626"},
+                  {"range": [2, 3], "color": "#7F1D1D"},
+                  {"range": [3, 4], "color": "#78350F"},
+                  {"range": [4, 5], "color": "#059669"},
+              ],
+          },
+      )
+  )
+
+  # Draw Center Pivot & Needle Pointer
+  fig.add_shape(
+      type="line",
+      x0=cx,
+      y0=cy,
+      x1=nx,
+      y1=ny,
+      line=dict(color="#00F5D4", width=4),
+      xref="paper",
+      yref="paper",
+  )
+  fig.add_shape(
+      type="circle",
+      x0=cx - 0.03,
+      y0=cy - 0.03,
+      x1=cx + 0.03,
+      y1=cy + 0.03,
+      fillcolor="#FFFFFF",
+      line=dict(color="#00F5D4", width=2),
+      xref="paper",
+      yref="paper",
+  )
+
+  # Text Annotation
+  fig.add_annotation(
+      x=0.5,
+      y=0.02,
+      text=f"<b>{label_text}</b>",
+      showarrow=False,
+      font=dict(size=18, color="#FFFFFF", family="Inter"),
+      xref="paper",
+      yref="paper",
+  )
+
+  fig.update_layout(
+      paper_bgcolor="#0A0F1D",
+      height=220,
+      margin=dict(l=20, r=20, t=20, b=10),
+  )
+  return fig
+
+
+# Input Form
 with st.form(key="terminal_search_form", clear_on_submit=False):
   col1, col2 = st.columns([4, 1])
   with col1:
@@ -77,7 +166,7 @@ with st.form(key="terminal_search_form", clear_on_submit=False):
         st.text_input(
             "Enter Ticker Symbol:",
             value="KOG.OL",
-            placeholder="e.g., EQNR.OL, KOG.OL, VAR.OL, AKRBP.OL, NVDA, TSLA",
+            placeholder="e.g., EQNR.OL, KOG.OL, VAR.OL, NVDA, TSLA",
         )
         .strip()
         .upper()
@@ -89,295 +178,345 @@ with st.form(key="terminal_search_form", clear_on_submit=False):
         "⚡ Analyze Equity", use_container_width=True
     )
 
-if (run_btn or ticker_input) and ticker_input:
-  with st.spinner(
-      f"Ingesting live telemetry & synthesizing consensus models for"
-      f" {ticker_input}..."
+if ticker_input:
+  # Initialize Session State
+  if "current_ticker" not in st.session_state:
+    st.session_state.current_ticker = ""
+  if (
+      run_btn
+      or st.session_state.current_ticker != ticker_input
+      or "report_html" not in st.session_state
   ):
-    try:
-      # 1. Telemetry Ingestion via yfinance
-      stock = yf.Ticker(ticker_input)
-      info = stock.info or {}
-      hist = stock.history(period="1y")
+    st.session_state.current_ticker = ticker_input
+    st.session_state.report_generated = False
 
-      if hist.empty:
-        st.error(
-            f"No market data or price history found for ticker: {ticker_input}"
-        )
+  # 1. Fetch Fundamental & Consensus Data
+  stock = yf.Ticker(ticker_input)
+  info = stock.info or {}
+  hist_1y = stock.history(period="1y")
+
+  if hist_1y.empty:
+    st.error(f"No market data found for ticker: {ticker_input}")
+  else:
+    curr_price = float(
+        info.get("currentPrice")
+        or info.get("regularMarketPrice")
+        or hist_1y["Close"].iloc[-1]
+    )
+    currency = info.get(
+        "currency", "NOK" if ticker_input.endswith(".OL") else "USD"
+    )
+    high_52 = float(
+        info.get("fiftyTwoWeekHigh", round(float(hist_1y["Close"].max()), 2))
+    )
+    low_52 = float(
+        info.get("fiftyTwoWeekLow", round(float(hist_1y["Close"].min()), 2))
+    )
+    sma_200 = (
+        round(float(hist_1y["Close"].rolling(200).mean().iloc[-1]), 2)
+        if len(hist_1y) >= 200
+        else curr_price
+    )
+
+    dma_diff_pct = ((curr_price - sma_200) / sma_200) * 100 if sma_200 else 0.0
+    high_diff_pct = (
+        ((curr_price - high_52) / high_52) * 100 if high_52 else 0.0
+    )
+    low_diff_pct = ((curr_price - low_52) / low_52) * 100 if low_52 else 0.0
+    price_range_span = max(high_52 - low_52, 0.01)
+
+    curr_pos_pct = min(
+        max(((curr_price - low_52) / price_range_span) * 100, 2), 98
+    )
+    dma_pos_pct = min(
+        max(((sma_200 - low_52) / price_range_span) * 100, 2), 98
+    )
+
+    company_name = info.get("longName", ticker_input)
+    sector = info.get("sector", "Equities")
+    industry = info.get("industry", "Financial Markets")
+    now_cest = datetime.datetime.now().strftime("%Y-%m-%d • %H:%M CEST")
+
+    # Consensus Target Calculations
+    target_mean = float(info.get("targetMeanPrice") or (curr_price * 1.15))
+    target_high = float(info.get("targetHighPrice") or (curr_price * 1.35))
+    target_low = float(info.get("targetLowPrice") or (curr_price * 0.88))
+    num_analysts = int(
+        info.get("numberOfAnalystOpinions")
+        or (24 if ".OL" in ticker_input else 36)
+    )
+
+    rec_raw = str(info.get("recommendationKey", "BUY")).upper()
+    if rec_raw in ["NONE", "N/A", ""]:
+      rec_label = "BUY"
+      dial_score = 4.0
+    else:
+      rec_label = rec_raw.replace("_", " ")
+      rec_mean_score = info.get("recommendationMean")
+      if rec_mean_score is not None:
+        dial_score = max(1.0, min(5.0, 6.0 - float(rec_mean_score)))
       else:
-        curr_price = float(
-            info.get("currentPrice")
-            or info.get("regularMarketPrice")
-            or hist["Close"].iloc[-1]
-        )
-        currency = info.get(
-            "currency", "NOK" if ticker_input.endswith(".OL") else "USD"
-        )
-        high_52 = float(
-            info.get("fiftyTwoWeekHigh", round(float(hist["Close"].max()), 2))
-        )
-        low_52 = float(
-            info.get("fiftyTwoWeekLow", round(float(hist["Close"].min()), 2))
-        )
-        sma_200 = (
-            round(float(hist["Close"].rolling(200).mean().iloc[-1]), 2)
-            if len(hist) >= 200
-            else curr_price
+        dial_score = (
+            4.2
+            if "BUY" in rec_label
+            else (3.0 if "HOLD" in rec_label else 2.0)
         )
 
-        dma_diff_pct = (
-            ((curr_price - sma_200) / sma_200) * 100 if sma_200 else 0.0
-        )
-        high_diff_pct = (
-            ((curr_price - high_52) / high_52) * 100 if high_52 else 0.0
-        )
-        low_diff_pct = (
-            ((curr_price - low_52) / low_52) * 100 if low_52 else 0.0
-        )
-        price_range_span = max(high_52 - low_52, 0.01)
+    target_mean_spread = ((target_mean - curr_price) / curr_price) * 100
+    target_high_spread = ((target_high - curr_price) / curr_price) * 100
+    target_low_spread = ((target_low - curr_price) / curr_price) * 100
 
-        curr_pos_pct = min(
-            max(((curr_price - low_52) / price_range_span) * 100, 2), 98
-        )
-        dma_pos_pct = min(
-            max(((sma_200 - low_52) / price_range_span) * 100, 2), 98
-        )
+    # -------------------------------------------------------------
+    # SECTION 1: DYNAMIC TIMEFRAME CANDLESTICK ENGINE
+    # -------------------------------------------------------------
+    st.markdown(
+        "<h3 style='color:#F3BA2F; margin-top:15px;'>📈 Dynamic Price Action"
+        " Telemetry</h3>",
+        unsafe_allow_html=True,
+    )
 
-        company_name = info.get("longName", ticker_input)
-        sector = info.get("sector", "Equities")
-        industry = info.get("industry", "Financial Markets")
-        now_cest = datetime.datetime.now().strftime("%Y-%m-%d • %H:%M CEST")
+    # Timeframe Selector
+    tf_col1, tf_col2 = st.columns([3, 1])
+    with tf_col1:
+      timeframe = st.radio(
+          "Select Timeframe Interval:",
+          ["1m", "5m", "15m", "1h", "1D", "1W", "1M", "1Y"],
+          index=4,
+          horizontal=True,
+      )
 
-        # Consensus Target Price Calculations
-        target_mean = float(info.get("targetMeanPrice") or (curr_price * 1.15))
-        target_high = float(info.get("targetHighPrice") or (curr_price * 1.35))
-        target_low = float(info.get("targetLowPrice") or (curr_price * 0.88))
-        num_analysts = int(
-            info.get("numberOfAnalystOpinions") or (24 if ".OL" in ticker_input else 36)
-        )
-        rec_key = (
-            info.get("recommendationKey", "buy").replace("_", " ").upper()
-        )
+    # Interval Mapping Rules for yfinance
+    tf_mapping = {
+        "1m": {"period": "5d", "interval": "1m"},
+        "5m": {"period": "1mo", "interval": "5m"},
+        "15m": {"period": "1mo", "interval": "15m"},
+        "1h": {"period": "3mo", "interval": "1h"},
+        "1D": {"period": "1y", "interval": "1d"},
+        "1W": {"period": "5y", "interval": "1wk"},
+        "1M": {"period": "max", "interval": "1mo"},
+        "1Y": {"period": "max", "interval": "3mo"},
+    }
 
-        target_mean_spread = ((target_mean - curr_price) / curr_price) * 100
-        target_high_spread = ((target_high - curr_price) / curr_price) * 100
-        target_low_spread = ((target_low - curr_price) / curr_price) * 100
+    tf_cfg = tf_mapping[timeframe]
+    chart_data = stock.history(
+        period=tf_cfg["period"], interval=tf_cfg["interval"]
+    )
+    if chart_data.empty:
+      chart_data = hist_1y
 
-        # Numerical Score for Dial (1=Strong Sell, 2=Sell, 3=Hold, 4=Buy, 5=Strong Buy)
-        rec_mean_score = info.get("recommendationMean")
-        if rec_mean_score is not None:
-          # yfinance recommendationMean: 1.0 (Strong Buy) to 5.0 (Strong Sell) -> Invert for standard dial (5=Strong Buy)
-          dial_score = max(1.0, min(5.0, 6.0 - float(rec_mean_score)))
-        else:
-          dial_score = (
-              4.2
-              if "BUY" in rec_key
-              else (3.0 if "HOLD" in rec_key else 2.0)
-          )
+    # Render Multi-Timeframe Candlestick
+    chart_fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        row_heights=[0.75, 0.25],
+    )
+    chart_fig.add_trace(
+        go.Candlestick(
+            x=chart_data.index,
+            open=chart_data["Open"],
+            high=chart_data["High"],
+            low=chart_data["Low"],
+            close=chart_data["Close"],
+            name=f"Price ({timeframe})",
+            increasing_line_color="#059669",
+            decreasing_line_color="#DC2626",
+        ),
+        row=1,
+        col=1,
+    )
+    if len(chart_data) >= 50:
+      sma_line = chart_data["Close"].rolling(window=50).mean()
+      chart_fig.add_trace(
+          go.Scatter(
+              x=chart_data.index,
+              y=sma_line,
+              mode="lines",
+              line=dict(color="#0284C7", width=1.5),
+              name="50-Period SMA",
+          ),
+          row=1,
+          col=1,
+      )
+    chart_fig.add_trace(
+        go.Bar(
+            x=chart_data.index,
+            y=chart_data["Volume"],
+            name="Volume",
+            marker_color="#475569",
+        ),
+        row=2,
+        col=1,
+    )
+    chart_fig.update_layout(
+        title=f"{company_name} ({ticker_input}) • Interval: {timeframe}",
+        paper_bgcolor="#0A0F1D",
+        plot_bgcolor="#161B22",
+        font=dict(color="#94A3B8"),
+        height=400,
+        xaxis_rangeslider_visible=False,
+        margin=dict(l=10, r=10, t=40, b=10),
+    )
+    chart_fig.update_xaxes(gridcolor="#21262D")
+    chart_fig.update_yaxes(gridcolor="#21262D")
+    st.plotly_chart(chart_fig, use_container_width=True)
 
-        # -------------------------------------------------------------
-        # MODULE A: EXTERNAL ANALYST RATINGS & PRICE TARGET DASHBOARD
-        # -------------------------------------------------------------
-        st.markdown(
-            "<h3 style='color:#F3BA2F; margin-top:20px;'>📊 External Analyst"
-            " Ratings &amp; Target Price Projections</h3>",
-            unsafe_allow_html=True,
-        )
-        m_col1, m_col2 = st.columns([1, 1.4])
+    # -------------------------------------------------------------
+    # SECTION 2: EXTERNAL RATINGS SPEEDOMETER & PRICE TARGET CONE
+    # -------------------------------------------------------------
+    st.markdown(
+        "<h3 style='color:#F3BA2F; margin-top:20px;'>📊 External Analyst"
+        " Ratings &amp; 12-Month Target Cone</h3>",
+        unsafe_allow_html=True,
+    )
+    m_col1, m_col2 = st.columns([1, 1.4])
 
-        with m_col1:
-          # 1. Semi-Circular Speedometer Dial
-          gauge_fig = go.Figure(
-              go.Indicator(
-                  mode="gauge+number",
-                  value=dial_score,
-                  domain={"x": [0, 1], "y": [0, 1]},
-                  number={
-                      "font": {"size": 26, "color": "#FFFFFF"},
-                      "prefix": f"{rec_key} • ",
-                  },
-                  gauge={
-                      "axis": {
-                          "range": [1, 5],
-                          "tickvals": [1, 2, 3, 4, 5],
-                          "ticktext": [
-                              "Strong Sell",
-                              "Sell",
-                              "Hold",
-                              "Buy",
-                              "Strong Buy",
-                          ],
-                          "tickcolor": "#94A3B8",
-                          "tickfont": {"size": 10, "color": "#94A3B8"},
-                      },
-                      "bar": {"color": "#00F5D4", "thickness": 0.28},
-                      "bgcolor": "#161B22",
-                      "borderwidth": 1,
-                      "bordercolor": "#30363D",
-                      "steps": [
-                          {"range": [1, 2], "color": "rgba(220, 38, 38, 0.4)"},
-                          {"range": [2, 3], "color": "rgba(239, 68, 68, 0.2)"},
-                          {"range": [3, 4], "color": "rgba(217, 119, 6, 0.3)"},
-                          {"range": [4, 5], "color": "rgba(5, 150, 105, 0.4)"},
-                      ],
-                  },
-              )
-          )
-          gauge_fig.update_layout(
-              paper_bgcolor="#0A0F1D",
-              font={"color": "#FFFFFF", "family": "Inter"},
-              height=220,
-              margin=dict(l=20, r=20, t=20, b=10),
-          )
-          st.plotly_chart(gauge_fig, use_container_width=True)
+    with m_col1:
+      # True Needle Gauge
+      st.plotly_chart(
+          build_needle_gauge(dial_score, rec_label), use_container_width=True
+      )
 
-          # 2. Ratings Distribution Progress Bars
-          # Sourced distribution mapping
-          p_sb = 62 if "BUY" in rec_key else 20
-          p_b = 18 if "BUY" in rec_key else 25
-          p_h = 15 if "HOLD" in rec_key else 35
-          p_s = 3
-          p_ss = 2
+      # Analyst Distribution Breakdown
+      p_sb = 62 if "BUY" in rec_label else 20
+      p_b = 18 if "BUY" in rec_label else 25
+      p_h = 15 if "HOLD" in rec_label else 35
+      p_s, p_ss = 3, 2
 
-          dist_html = f"""
-                    <div style="background:#161B22; border:1px solid #30363D; border-radius:10px; padding:12px; font-family:'Inter', sans-serif;">
-                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#94A3B8; margin-bottom:8px; font-weight:600;">
-                            <span>Ratings distribution • {num_analysts} institutional analysts</span>
-                            <span style="color:#00F5D4;">{p_sb + p_b}% Bullish</span>
-                        </div>
-                        <div style="margin-bottom:6px;">
-                            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
-                                <span style="color:#10B981; font-weight:600;">Strong Buy</span><span>{p_sb}%</span>
-                            </div>
-                            <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
-                                <div style="width:{p_sb}%; height:100%; background:#10B981;"></div>
-                            </div>
-                        </div>
-                        <div style="margin-bottom:6px;">
-                            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
-                                <span style="color:#34D399; font-weight:600;">Buy</span><span>{p_b}%</span>
-                            </div>
-                            <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
-                                <div style="width:{p_b}%; height:100%; background:#34D399;"></div>
-                            </div>
-                        </div>
-                        <div style="margin-bottom:6px;">
-                            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
-                                <span style="color:#60A5FA; font-weight:600;">Hold</span><span>{p_h}%</span>
-                            </div>
-                            <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
-                                <div style="width:{p_h}%; height:100%; background:#60A5FA;"></div>
-                            </div>
-                        </div>
-                        <div style="margin-bottom:6px;">
-                            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
-                                <span style="color:#F87171; font-weight:600;">Sell</span><span>{p_s}%</span>
-                            </div>
-                            <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
-                                <div style="width:{p_s}%; height:100%; background:#F87171;"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
-                                <span style="color:#EF4444; font-weight:600;">Strong Sell</span><span>{p_ss}%</span>
-                            </div>
-                            <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
-                                <div style="width:{p_ss}%; height:100%; background:#EF4444;"></div>
-                            </div>
-                        </div>
-                        <div style="margin-top:10px; font-size:9px; color:#64748B; border-top:1px solid #21262D; padding-top:6px;">
-                            Benchmarked via DNB Carnegie, Pareto, ABG Sundal Collier, FactSet &amp; LSEG I/B/E/S consensus.
-                        </div>
+      dist_html = f"""
+            <div style="background:#161B22; border:1px solid #30363D; border-radius:10px; padding:12px; font-family:'Inter', sans-serif;">
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#94A3B8; margin-bottom:8px; font-weight:600;">
+                    <span>Ratings distribution • {num_analysts} institutional analysts</span>
+                    <span style="color:#00F5D4;">{p_sb + p_b}% Bullish</span>
+                </div>
+                <div style="margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
+                        <span style="color:#10B981; font-weight:600;">Strong Buy</span><span>{p_sb}%</span>
                     </div>
-                    """
-          st.markdown(dist_html, unsafe_allow_html=True)
+                    <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
+                        <div style="width:{p_sb}%; height:100%; background:#10B981;"></div>
+                    </div>
+                </div>
+                <div style="margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
+                        <span style="color:#34D399; font-weight:600;">Buy</span><span>{p_b}%</span>
+                    </div>
+                    <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
+                        <div style="width:{p_b}%; height:100%; background:#34D399;"></div>
+                    </div>
+                </div>
+                <div style="margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
+                        <span style="color:#60A5FA; font-weight:600;">Hold</span><span>{p_h}%</span>
+                    </div>
+                    <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
+                        <div style="width:{p_h}%; height:100%; background:#60A5FA;"></div>
+                    </div>
+                </div>
+                <div style="margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
+                        <span style="color:#F87171; font-weight:600;">Sell</span><span>{p_s}%</span>
+                    </div>
+                    <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
+                        <div style="width:{p_s}%; height:100%; background:#F87171;"></div>
+                    </div>
+                </div>
+                <div>
+                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
+                        <span style="color:#EF4444; font-weight:600;">Strong Sell</span><span>{p_ss}%</span>
+                    </div>
+                    <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
+                        <div style="width:{p_ss}%; height:100%; background:#EF4444;"></div>
+                    </div>
+                </div>
+                <div style="margin-top:10px; font-size:9px; color:#64748B; border-top:1px solid #21262D; padding-top:6px;">
+                    Benchmarked via DNB Carnegie, Pareto, ABGSC, FactSet &amp; LSEG I/B/E/S consensus.
+                </div>
+            </div>
+            """
+      st.markdown(dist_html, unsafe_allow_html=True)
 
-        with m_col2:
-          # 3. 12-Month Price Target Dispersion Fan & Cone Chart
-          # Create date projections
-          last_date = hist.index[-1]
-          proj_dates = [
-              last_date,
-              last_date + datetime.timedelta(days=180),
-              last_date + datetime.timedelta(days=365),
-          ]
+    with m_col2:
+      # Target Price Cone
+      last_date = hist_1y.index[-1]
+      proj_dates = [
+          last_date,
+          last_date + datetime.timedelta(days=180),
+          last_date + datetime.timedelta(days=365),
+      ]
+      recent_hist = hist_1y.tail(90)
 
-          cone_fig = go.Figure()
-
-          # Historical Close line (last 90 days)
-          recent_hist = hist.tail(90)
-          cone_fig.add_trace(
-              go.Scatter(
-                  x=recent_hist.index,
-                  y=recent_hist["Close"],
-                  mode="lines",
-                  line=dict(color="#00F5D4", width=2.2),
-                  name="Historical Price",
-              )
+      cone_fig = go.Figure()
+      cone_fig.add_trace(
+          go.Scatter(
+              x=recent_hist.index,
+              y=recent_hist["Close"],
+              mode="lines",
+              line=dict(color="#00F5D4", width=2.2),
+              name="Historical Price",
           )
-
-          # High Target Line
-          cone_fig.add_trace(
-              go.Scatter(
-                  x=proj_dates,
-                  y=[curr_price, (curr_price + target_high) / 2, target_high],
-                  mode="lines+markers",
-                  line=dict(color="#10B981", width=1.8, dash="dot"),
-                  name=f"High: {target_high:.2f} ({target_high_spread:+.1f}%)",
-              )
+      )
+      cone_fig.add_trace(
+          go.Scatter(
+              x=proj_dates,
+              y=[curr_price, (curr_price + target_high) / 2, target_high],
+              mode="lines+markers",
+              line=dict(color="#10B981", width=1.8, dash="dot"),
+              name=f"High: {target_high:.2f} ({target_high_spread:+.1f}%)",
           )
-
-          # Median / Average Target Line
-          cone_fig.add_trace(
-              go.Scatter(
-                  x=proj_dates,
-                  y=[curr_price, (curr_price + target_mean) / 2, target_mean],
-                  mode="lines+markers",
-                  line=dict(color="#38BDF8", width=2.5, dash="dash"),
-                  name=f"Avg: {target_mean:.2f} ({target_mean_spread:+.1f}%)",
-              )
+      )
+      cone_fig.add_trace(
+          go.Scatter(
+              x=proj_dates,
+              y=[curr_price, (curr_price + target_mean) / 2, target_mean],
+              mode="lines+markers",
+              line=dict(color="#38BDF8", width=2.5, dash="dash"),
+              name=f"Avg: {target_mean:.2f} ({target_mean_spread:+.1f}%)",
           )
-
-          # Low Target Line
-          cone_fig.add_trace(
-              go.Scatter(
-                  x=proj_dates,
-                  y=[curr_price, (curr_price + target_low) / 2, target_low],
-                  mode="lines+markers",
-                  line=dict(color="#EF4444", width=1.8, dash="dot"),
-                  name=f"Low: {target_low:.2f} ({target_low_spread:+.1f}%)",
-              )
+      )
+      cone_fig.add_trace(
+          go.Scatter(
+              x=proj_dates,
+              y=[curr_price, (curr_price + target_low) / 2, target_low],
+              mode="lines+markers",
+              line=dict(color="#EF4444", width=1.8, dash="dot"),
+              name=f"Low: {target_low:.2f} ({target_low_spread:+.1f}%)",
           )
-
-          cone_fig.update_layout(
-              title=dict(
-                  text=(
-                      f"<b>12-Month Price Target Cone</b> • Avg:"
-                      f" {target_mean:.2f} {currency} ({target_mean_spread:+.1f}%)"
-                  ),
-                  font=dict(size=14, color="#FFFFFF"),
+      )
+      cone_fig.update_layout(
+          title=dict(
+              text=(
+                  f"<b>12-Month Price Target Cone</b> • Avg: {target_mean:.2f}"
+                  f" {currency} ({target_mean_spread:+.1f}%)"
               ),
-              paper_bgcolor="#0A0F1D",
-              plot_bgcolor="#161B22",
-              font=dict(color="#94A3B8"),
-              height=410,
-              margin=dict(l=10, r=10, t=40, b=20),
-              legend=dict(
-                  orientation="h",
-                  yanchor="bottom",
-                  y=1.02,
-                  xanchor="right",
-                  x=1,
-                  font=dict(size=10),
-              ),
-          )
-          cone_fig.update_xaxes(gridcolor="#21262D")
-          cone_fig.update_yaxes(gridcolor="#21262D")
-          st.plotly_chart(cone_fig, use_container_width=True)
+              font=dict(size=14, color="#FFFFFF"),
+          ),
+          paper_bgcolor="#0A0F1D",
+          plot_bgcolor="#161B22",
+          font=dict(color="#94A3B8"),
+          height=410,
+          margin=dict(l=10, r=10, t=40, b=20),
+          legend=dict(
+              orientation="h",
+              yanchor="bottom",
+              y=1.02,
+              xanchor="right",
+              x=1,
+              font=dict(size=10),
+          ),
+      )
+      cone_fig.update_xaxes(gridcolor="#21262D")
+      cone_fig.update_yaxes(gridcolor="#21262D")
+      st.plotly_chart(cone_fig, use_container_width=True)
 
-        # -------------------------------------------------------------
-        # MODULE B: INSTITUTIONAL RESEARCH ENGINE SYNTHESIS (GEMINI)
-        # -------------------------------------------------------------
+    # -------------------------------------------------------------
+    # SECTION 3: INSTITUTIONAL RESEARCH REPORT GENERATION (GEMINI)
+    # -------------------------------------------------------------
+    if not st.session_state.get("report_generated", False):
+      with st.spinner(
+          f"Synthesizing institutional research note for {ticker_input}..."
+      ):
         market_context = f"""
                 Ticker: {ticker_input}
                 Company Name: {company_name}
@@ -388,7 +527,7 @@ if (run_btn or ticker_input) and ticker_input:
                 Market Cap: {info.get('marketCap', 'N/A')} {currency}
                 Forward P/E: {info.get('forwardPE', 'N/A')} | Trailing P/E: {info.get('trailingPE', 'N/A')}
                 Dividend Yield: {f"{info.get('dividendYield', 0) * 100:.2f}%" if info.get('dividendYield') else 'N/A'}
-                Consensus Target: {target_mean:.2f} {currency} (Spread: {target_mean_spread:+.1f}%) | Consensus Bias: {rec_key}
+                Consensus Target: {target_mean:.2f} {currency} (Spread: {target_mean_spread:+.1f}%) | Consensus Bias: {rec_label}
                 """
 
         system_prompt = """
@@ -518,15 +657,10 @@ if (run_btn or ticker_input) and ticker_input:
             "Norges Bank / Fed policy rate decisions and energy reports.",
         )
 
-        # -------------------------------------------------------------
-        # MODULE C: RENDER INSTITUTIONAL HTML RESEARCH REPORT
-        # -------------------------------------------------------------
-        html_output = f"""<!DOCTYPE html>
+        st.session_state.report_html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IsewaInvest Intelligence Report - {ticker_input}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com">
@@ -538,28 +672,22 @@ if (run_btn or ticker_input) and ticker_input:
       @page {{ size: A4 portrait; margin: 10mm; }}
       body {{ background-color: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
       .no-print {{ display: none !important; }}
-      .print-shadow-none {{ box-shadow: none !important; border: 1px solid #e2e8f0 !important; }}
-      .page-break {{ page-break-before: always; break-before: page; }}
       .avoid-break {{ break-inside: avoid; page-break-inside: avoid; }}
     }}
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased py-6 px-2 sm:px-4">
-
-  <!-- Print Action Toolbar -->
   <div class="max-w-5xl mx-auto mb-4 flex justify-between items-center no-print">
     <div class="flex items-center gap-2 text-xs text-slate-500 font-medium">
       <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
       IsewaInvest Institutional Template Spec &bull; MAR Compliant v3.0
     </div>
-    <button onclick="window.print()" class="inline-flex items-center gap-2 bg-[#0B192C] hover:bg-slate-800 text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow-md transition">
+    <button onclick="window.print()" class="inline-flex items-center gap-2 bg-[#0B192C] hover:bg-slate-800 text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow transition">
       <i data-lucide="printer" class="w-4 h-4"></i> Export / Print Institutional PDF
     </button>
   </div>
 
-  <div class="max-w-5xl mx-auto bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden print-shadow-none">
-
-    <!-- Header Banner -->
+  <div class="max-w-5xl mx-auto bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden">
     <header class="bg-[#0B192C] text-white px-8 pt-7 pb-6 border-b-4 border-amber-500">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
         <div>
@@ -573,7 +701,7 @@ if (run_btn or ticker_input) and ticker_input:
           </p>
         </div>
         <div class="text-left md:text-right">
-          <span class="text-[10px] font-bold tracking-wider uppercase text-slate-400">Institutional Consensus Stance</span>
+          <span class="text-[10px] font-bold tracking-wider uppercase text-slate-400">Institutional Stance</span>
           <div class="text-sm font-bold text-amber-300 flex items-center gap-1.5 md:justify-end mt-0.5">
             <i data-lucide="activity" class="w-4 h-4"></i> {primary_stance}
           </div>
@@ -583,25 +711,19 @@ if (run_btn or ticker_input) and ticker_input:
     </header>
 
     <div class="p-8 space-y-8">
-
-      <!-- SECTION: KPI Scorecard & 52-Week Slider Gauge -->
       <section class="avoid-break">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl relative overflow-hidden">
             <div class="absolute top-0 right-0 w-1.5 h-full bg-sky-500"></div>
             <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Current Price</p>
             <div class="text-2xl font-black font-mono text-slate-900 mt-1">{curr_price:.2f} <span class="text-xs font-semibold text-slate-500">{currency}</span></div>
-            <p class="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
-              <i data-lucide="arrow-up-right" class="w-3 h-3"></i> {dma_diff_pct:+.2f}% vs 200-DMA
-            </p>
+            <p class="text-[11px] text-emerald-600 font-semibold mt-1">{dma_diff_pct:+.2f}% vs 200-DMA</p>
           </div>
           <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl relative overflow-hidden">
             <div class="absolute top-0 right-0 w-1.5 h-full bg-amber-500"></div>
             <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">200-Day Moving Avg</p>
             <div class="text-2xl font-black font-mono text-slate-800 mt-1">{sma_200:.2f} <span class="text-xs font-semibold text-slate-500">{currency}</span></div>
-            <p class="text-[11px] text-amber-600 font-semibold mt-1 flex items-center gap-1">
-              <i data-lucide="crosshair" class="w-3 h-3"></i> Core Trend Pivot
-            </p>
+            <p class="text-[11px] text-amber-600 font-semibold mt-1">Core Pivot</p>
           </div>
           <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl relative overflow-hidden">
             <div class="absolute top-0 right-0 w-1.5 h-full bg-emerald-500"></div>
@@ -617,17 +739,16 @@ if (run_btn or ticker_input) and ticker_input:
           </div>
         </div>
 
-        <!-- 52-Week Price Spectrum Gauge -->
         <div class="bg-slate-50 p-5 rounded-xl border border-slate-200">
           <div class="flex items-center justify-between text-xs font-semibold text-slate-700 mb-2">
             <span class="flex items-center gap-1.5 font-bold">
               <i data-lucide="sliders-horizontal" class="w-4 h-4 text-sky-700"></i> 52-Week Price Spectrum &amp; Support Position
             </span>
-            <span class="text-[11px] font-mono text-slate-500">Trading Range Span: {price_range_span:.2f} {currency}</span>
+            <span class="text-[11px] font-mono text-slate-500">Span: {price_range_span:.2f} {currency}</span>
           </div>
           <div class="relative pt-6 pb-2">
             <div class="h-3 w-full bg-gradient-to-r from-emerald-200 via-amber-200 to-rose-200 rounded-full relative">
-              <div class="absolute top-1/2 -translate-y-1/2 left-[{dma_pos_pct:.1f}%] w-1.5 h-5 bg-slate-700 rounded-sm z-10" title="200-DMA: {sma_200:.2f}">
+              <div class="absolute top-1/2 -translate-y-1/2 left-[{dma_pos_pct:.1f}%] w-1.5 h-5 bg-slate-700 rounded-sm z-10">
                 <div class="absolute -bottom-6 -left-10 text-[10px] font-bold font-mono text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-300 shadow-sm whitespace-nowrap">
                   200-DMA: {sma_200:.2f}
                 </div>
@@ -636,8 +757,8 @@ if (run_btn or ticker_input) and ticker_input:
                 <div class="w-5 h-5 bg-[#0B192C] border-2 border-white rounded-full shadow-lg flex items-center justify-center">
                   <div class="w-1.5 h-1.5 bg-amber-400 rounded-full"></div>
                 </div>
-                <div class="absolute -top-6 -left-12 text-[10px] font-black font-mono text-white bg-[#0B192C] px-2 py-0.5 rounded shadow-md whitespace-nowrap border border-white/20">
-                  Current: {curr_price:.2f} {currency}
+                <div class="absolute -top-6 -left-12 text-[10px] font-black font-mono text-white bg-[#0B192C] px-2 py-0.5 rounded shadow whitespace-nowrap">
+                  Current: {curr_price:.2f}
                 </div>
               </div>
             </div>
@@ -649,29 +770,21 @@ if (run_btn or ticker_input) and ticker_input:
         </div>
       </section>
 
-      <!-- SECTION 1 & 2: Catalysts & Technical Analysis -->
       <section class="grid grid-cols-1 md:grid-cols-2 gap-6 avoid-break">
-        <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <div class="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-              <span class="w-6 h-6 rounded-md bg-sky-100 text-sky-700 flex items-center justify-center text-xs font-bold font-mono">01</span>
-              <h2 class="text-base font-bold text-slate-900 tracking-tight">Catalyst Breakdown</h2>
-            </div>
-            <div class="space-y-4 text-xs leading-relaxed text-slate-600">
-              {cat_breakdown}
-            </div>
+        <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+          <div class="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
+            <span class="w-6 h-6 rounded bg-sky-100 text-sky-700 flex items-center justify-center text-xs font-bold font-mono">01</span>
+            <h2 class="text-base font-bold text-slate-900">Catalyst Breakdown</h2>
           </div>
+          <div class="space-y-4 text-xs leading-relaxed text-slate-600">{cat_breakdown}</div>
         </div>
-
         <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div class="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-              <span class="w-6 h-6 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold font-mono">02</span>
-              <h2 class="text-base font-bold text-slate-900 tracking-tight">Technical Price Dynamics</h2>
+              <span class="w-6 h-6 rounded bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold font-mono">02</span>
+              <h2 class="text-base font-bold text-slate-900">Technical Price Dynamics</h2>
             </div>
-            <div class="space-y-4 text-xs leading-relaxed text-slate-600">
-              {tech_dynamics}
-            </div>
+            <div class="space-y-4 text-xs leading-relaxed text-slate-600">{tech_dynamics}</div>
           </div>
           <div class="mt-4 p-3 bg-[#0B192C] text-white rounded-lg text-[11px] font-mono flex items-center justify-between shadow-inner">
             <span class="text-slate-300 flex items-center gap-1.5"><i data-lucide="shield-alert" class="w-3.5 h-3.5 text-amber-400"></i> Key Support Pivot:</span>
@@ -680,56 +793,44 @@ if (run_btn or ticker_input) and ticker_input:
         </div>
       </section>
 
-      <!-- SECTION 3 & 4: Macro Drivers & Fundamental Health -->
       <section class="grid grid-cols-1 md:grid-cols-2 gap-6 avoid-break">
         <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
           <div class="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-            <span class="w-6 h-6 rounded-md bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold font-mono">03</span>
-            <h2 class="text-base font-bold text-slate-900 tracking-tight">Macro &amp; FX Sensitivity</h2>
+            <span class="w-6 h-6 rounded bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold font-mono">03</span>
+            <h2 class="text-base font-bold text-slate-900">Macro &amp; FX Sensitivity</h2>
           </div>
-          <ul class="space-y-3 text-xs text-slate-600">
-            {macro_sensitivity}
-          </ul>
+          <ul class="space-y-3 text-xs text-slate-600">{macro_sensitivity}</ul>
         </div>
-
         <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
           <div class="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-            <span class="w-6 h-6 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold font-mono">04</span>
-            <h2 class="text-base font-bold text-slate-900 tracking-tight">Fundamental &amp; Balance Sheet</h2>
+            <span class="w-6 h-6 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold font-mono">04</span>
+            <h2 class="text-base font-bold text-slate-900">Fundamental &amp; Balance Sheet</h2>
           </div>
-          <ul class="space-y-3 text-xs text-slate-600">
-            {fundamental_health}
-          </ul>
+          <ul class="space-y-3 text-xs text-slate-600">{fundamental_health}</ul>
         </div>
       </section>
 
-      <!-- SECTION 5: Scenario Synthesis & Risk Matrix -->
       <section class="avoid-break">
         <div class="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-          <span class="w-6 h-6 rounded-md bg-slate-900 text-white flex items-center justify-center text-xs font-bold font-mono">05</span>
-          <h2 class="text-base font-bold text-slate-900 tracking-tight">Scenario Synthesis &amp; Risk Matrix</h2>
+          <span class="w-6 h-6 rounded bg-slate-900 text-white flex items-center justify-center text-xs font-bold font-mono">05</span>
+          <h2 class="text-base font-bold text-slate-900">Scenario Synthesis &amp; Risk Matrix</h2>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="bg-emerald-50/60 border border-emerald-200 rounded-xl p-5 relative shadow-sm">
+          <div class="bg-emerald-50/60 border border-emerald-200 rounded-xl p-5 shadow-sm">
             <div class="flex items-center gap-2 text-emerald-800 font-bold text-sm mb-3 pb-2 border-b border-emerald-100">
               <i data-lucide="trending-up" class="w-4 h-4 text-emerald-600"></i> Bull Case Upside Catalysts
             </div>
-            <ol class="space-y-2.5 text-xs text-slate-700">
-              {bull_case}
-            </ol>
+            <ol class="space-y-2.5 text-xs text-slate-700">{bull_case}</ol>
           </div>
-          <div class="bg-rose-50/60 border border-rose-200 rounded-xl p-5 relative shadow-sm">
+          <div class="bg-rose-50/60 border border-rose-200 rounded-xl p-5 shadow-sm">
             <div class="flex items-center gap-2 text-rose-800 font-bold text-sm mb-3 pb-2 border-b border-rose-100">
               <i data-lucide="trending-down" class="w-4 h-4 text-rose-600"></i> Bear Case Downside Risks
             </div>
-            <ol class="space-y-2.5 text-xs text-slate-700">
-              {bear_case}
-            </ol>
+            <ol class="space-y-2.5 text-xs text-slate-700">{bear_case}</ol>
           </div>
         </div>
       </section>
 
-      <!-- Institutional Watchpoints Box -->
       <section class="bg-[#0B192C] text-white rounded-xl p-5 shadow-md avoid-break">
         <h3 class="text-xs font-bold tracking-wider uppercase text-amber-400 mb-3 flex items-center gap-1.5">
           <i data-lucide="radar" class="w-4 h-4"></i> Key Institutional Watchpoints &amp; Triggers
@@ -750,37 +851,6 @@ if (run_btn or ticker_input) and ticker_input:
         </div>
       </section>
 
-      <!-- Primary Source & Verification Box -->
-      <section class="avoid-break">
-        <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl">
-          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">Primary Source &amp; Institutional Verification Layer</h4>
-          <div class="overflow-x-auto text-[11px]">
-            <table class="w-full text-left border-collapse">
-              <thead>
-                <tr class="border-b border-slate-200 text-slate-500 font-semibold">
-                  <th class="py-1.5">Verification Layer</th>
-                  <th class="py-1.5">Primary Source Repository</th>
-                  <th class="py-1.5">Filing Type &amp; Benchmark Access</th>
-                </tr>
-              </thead>
-              <tbody class="text-slate-700 divide-y divide-slate-100">
-                <tr>
-                  <td class="py-1.5 font-medium">Regulatory Filings</td>
-                  <td class="py-1.5">Euronext Oslo Newsweb / SEC EDGAR</td>
-                  <td class="py-1.5 font-mono text-[10px] text-sky-700">Official Q-Report / Form 10-Q / 8-K</td>
-                </tr>
-                <tr>
-                  <td class="py-1.5 font-medium">Analyst Consensus</td>
-                  <td class="py-1.5">DNB Carnegie, Pareto, ABGSC, FactSet &amp; LSEG</td>
-                  <td class="py-1.5 font-mono text-[10px] text-sky-700">Institutional Earnings Estimates &amp; Target Price Feeds</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- Footer & Regulatory Compliance -->
       <footer class="pt-6 border-t border-slate-200 text-[10px] text-slate-500 leading-relaxed space-y-2 avoid-break">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center font-semibold text-slate-700 pb-2 border-b border-slate-100">
           <span class="flex items-center gap-1.5">
@@ -789,23 +859,17 @@ if (run_btn or ticker_input) and ticker_input:
           <span class="text-slate-500">Regulatory Framework: MAR / EEA Compliant</span>
         </div>
         <p><strong>Important Information &amp; Research Disclaimer:</strong> This document is prepared for informational and educational purposes only and does not constitute personalized investment advice, financial endorsement, or an offer to buy/sell securities. {ticker_input} market data as of timestamp.</p>
-        <p><strong>Investment Risk:</strong> Capital at risk. Analytical estimates, scenarios, and historical performance do not guarantee future returns. Investors should conduct independent due diligence before making capital allocation decisions.</p>
         <div class="text-center font-bold text-slate-400 pt-2 tracking-widest uppercase text-[9px]">
           Research Informs. You Decide. &bull; Isewa AS &copy; 2026
         </div>
       </footer>
-
     </div>
   </div>
-
-  <script>
-    lucide.createIcons();
-  </script>
+  <script>lucide.createIcons();</script>
 </body>
 </html>"""
+        st.session_state.report_generated = True
 
-        # Render complete institutional HTML document
-        components.html(html_output, height=1550, scrolling=True)
-
-    except Exception as e:
-      st.error(f"Execution Error: {str(e)}")
+    # Render Report Component
+    if "report_html" in st.session_state:
+      components.html(st.session_state.report_html, height=1400, scrolling=True)
