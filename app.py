@@ -102,7 +102,7 @@ if run_btn and ticker_input:
                 """
 
         response = client.models.generate_content(
-            model="model="gemini-3.6-flash",
+            model="model="model="gemini-3.6-flash",
             contents=[system_prompt, market_context],
         )
 
