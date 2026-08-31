@@ -1,1126 +1,217 @@
-import datetime
-import math
 import os
-import re
+import streamlit as st
+from supabase import create_client, Client
 from google import genai
-import numpy as np
+from google.genai import types
+import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import streamlit as st
-import streamlit.components.v1 as components
-import yfinance as yf
 
-# Ingest Gemini API Key
-GEMINI_API_KEY = st.secrets.get(
-    "GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", "")
-).strip()
-
+# ---------------------------------------------------------
+# 1. PAGE CONFIGURATION & STYLING
+# ---------------------------------------------------------
 st.set_page_config(
-    page_title="Iserve | Institutional Equity Terminal",
-    page_icon="🏛️",
+    page_title="MarketCatalyst AI | Equity Research Terminal",
+    page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-# Custom Institutional Dark Mode Styling
-st.markdown(
-    """
-<style>
-    .stApp {
-        background-color: #0A0F1D;
-        color: #E2E8F0;
-    }
-    div[data-testid="stForm"] {
-        background: #111827;
-        border: 1px solid #1F2937;
-        border-radius: 12px;
-        padding: 20px;
-    }
-    div[data-baseweb="select"] {
-        background-color: #161B22;
-    }
-</style>
-""",
-    unsafe_allow_html=True,
-)
+st.markdown("""
+    <style>
+        .main { background-color: #0b0f19; color: #f3f4f6; }
+        .stMetric { background-color: #161e2e; border: 1px solid #233044; padding: 12px; border-radius: 6px; }
+        .badge-pro { background-color: #059669; color: white; padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 11px; }
+        .badge-free { background-color: #4b5563; color: white; padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 11px; }
+    </style>
+""", unsafe_allow_html=True)
 
-# Logo Discovery Helper
-logo_path = None
-for candidate in [
-    "iserve_logo.png",
-    "Gemini_Generated_Image_vo6bw6vo6bw6vo6b - Edited.png",
-    "Isewa Invest (1).png",
-]:
-  if os.path.exists(candidate):
-    logo_path = candidate
-    break
+# ---------------------------------------------------------
+# 2. CLIENT INITIALIZATION
+# ---------------------------------------------------------
+@st.cache_resource
+def init_supabase() -> Client:
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    return create_client(url, key)
 
-# App Header
-col_logo, col_title = st.columns([1, 6])
-with col_logo:
-  if logo_path:
-    st.image(logo_path, width=95)
-  else:
-    st.markdown("## 🏛️")
+supabase = init_supabase()
 
-with col_title:
-  st.markdown(
-      "<h1 style='color:#F3BA2F; margin-bottom:0px; font-weight:800;'>Iserve"
-      " Intelligence Terminal</h1>",
-      unsafe_allow_html=True,
-  )
-  st.markdown(
-      "<p style='color:#94A3B8; font-size:13px; margin-top:2px;'>We Serve, You"
-      " Prosper &bull; Global Institutional Equity Research &amp; Consensus"
-      " Intelligence</p>",
-      unsafe_allow_html=True,
-  )
+def get_gemini_client():
+    api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
+    return genai.Client(api_key=api_key)
 
-# -------------------------------------------------------------
-# GLOBAL MARKET REGISTRY WITH FLAGS & EXCHANGES
-# -------------------------------------------------------------
-GLOBAL_MARKETS = {
-    "Norway 🇳🇴": {
-        "Oslo Børs (OSEBX) - Energy & Shipping": {
-            "EQNR.OL": "Equinor ASA (EQNR.OL)",
-            "AKRBP.OL": "Aker BP ASA (AKRBP.OL)",
-            "VAR.OL": "Vår Energi ASA (VAR.OL)",
-            "FRO.OL": "Frontline PLC (FRO.OL)",
-            "HAFNI.OL": "Hafnia Ltd (HAFNI.OL)",
-            "BWLPG.OL": "BW LPG Ltd (BWLPG.OL)",
-            "SUBC.OL": "Subsea 7 SA (SUBC.OL)",
-        },
-        "Oslo Børs (OSEBX) - Defense & Industrials": {
-            "KOG.OL": "Kongsberg Gruppen ASA (KOG.OL)",
-            "TOM.OL": "Tomra Systems ASA (TOM.OL)",
-            "YAR.OL": "Yara International ASA (YAR.OL)",
-            "NHY.OL": "Norsk Hydro ASA (NHY.OL)",
-            "ORK.OL": "Orkla ASA (ORK.OL)",
-        },
-        "Oslo Børs (OSEBX) - Seafood & Maritime": {
-            "MOWI.OL": "Mowi ASA (MOWI.OL)",
-            "SALM.OL": "SalMar ASA (SALM.OL)",
-            "LSG.OL": "Lerøy Seafood Group ASA (LSG.OL)",
-            "BAKKA.OL": "Bakkafrost P/F (BAKKA.OL)",
-            "GSF.OL": "Grieg Seafood ASA (GSF.OL)",
-        },
-        "Oslo Børs (OSEBX) - Finance & Technology": {
-            "DNB.OL": "DNB Bank ASA (DNB.OL)",
-            "TEL.OL": "Telenor ASA (TEL.OL)",
-            "NOD.OL": "Nordic Semiconductor ASA (NOD.OL)",
-            "AUTO.OL": "AutoStore Holdings Ltd (AUTO.OL)",
-            "SCHA.OL": "Schibsted ASA Class A (SCHA.OL)",
-        },
-    },
-    "United States 🇺🇸": {
-        "NASDAQ - Mega-Cap Tech & Semis": {
-            "NVDA": "NVIDIA Corporation (NVDA)",
-            "AAPL": "Apple Inc. (AAPL)",
-            "MSFT": "Microsoft Corporation (MSFT)",
-            "GOOGL": "Alphabet Inc. (GOOGL)",
-            "AMZN": "Amazon.com, Inc. (AMZN)",
-            "META": "Meta Platforms, Inc. (META)",
-            "TSLA": "Tesla, Inc. (TSLA)",
-            "AVGO": "Broadcom Inc. (AVGO)",
-            "AMD": "Advanced Micro Devices, Inc. (AMD)",
-            "QCOM": "QUALCOMM Inc. (QCOM)",
-        },
-        "NYSE - Aerospace, Defense & Industrials": {
-            "LMT": "Lockheed Martin Corp. (LMT)",
-            "RTX": "RTX Corporation (RTX)",
-            "NOC": "Northrop Grumman Corp. (NOC)",
-            "GD": "General Dynamics Corp. (GD)",
-            "BA": "The Boeing Company (BA)",
-            "GE": "GE Aerospace (GE)",
-            "CAT": "Caterpillar Inc. (CAT)",
-        },
-        "NYSE - Energy & Financials": {
-            "XOM": "Exxon Mobil Corp. (XOM)",
-            "CVX": "Chevron Corporation (CVX)",
-            "SLB": "SLB / Schlumberger (SLB)",
-            "JPM": "JPMorgan Chase & Co. (JPM)",
-            "BAC": "Bank of America Corp. (BAC)",
-            "GS": "The Goldman Sachs Group (GS)",
-            "MS": "Morgan Stanley (MS)",
-            "BLK": "BlackRock, Inc. (BLK)",
-        },
-        "US Broad Market - Healthcare & Consumer": {
-            "LLY": "Eli Lilly and Company (LLY)",
-            "UNH": "UnitedHealth Group Inc. (UNH)",
-            "JNJ": "Johnson & Johnson (JNJ)",
-            "PFE": "Pfizer Inc. (PFE)",
-            "WMT": "Walmart Inc. (WMT)",
-            "COST": "Costco Wholesale Corp. (COST)",
-        },
-    },
-    "United Kingdom 🇬🇧": {
-        "London Stock Exchange (FTSE 100) - Energy & Mining": {
-            "SHEL.L": "Shell PLC (SHEL.L)",
-            "BP.L": "BP PLC (BP.L)",
-            "RIO.L": "Rio Tinto PLC (RIO.L)",
-            "GLEN.L": "Glencore PLC (GLEN.L)",
-            "AAL.L": "Anglo American PLC (AAL.L)",
-        },
-        "London Stock Exchange (FTSE 100) - Healthcare & Finance": {
-            "AZN.L": "AstraZeneca PLC (AZN.L)",
-            "GSK.L": "GSK PLC (GSK.L)",
-            "HSBA.L": "HSBC Holdings PLC (HSBA.L)",
-            "LSEG.L": "London Stock Exchange Group (LSEG.L)",
-            "ULVR.L": "Unilever PLC (ULVR.L)",
-        },
-    },
-    "Sweden 🇸🇪": {
-        "Nasdaq Stockholm (OMXS30) - Industrials & Tech": {
-            "VOLV-B.ST": "Volvo AB Class B (VOLV-B.ST)",
-            "ATLAS-A.ST": "Atlas Copco AB (ATLAS-A.ST)",
-            "SAND.ST": "Sandvik AB (SAND.ST)",
-            "ABB.ST": "ABB Ltd (ABB.ST)",
-            "ERIC-B.ST": "Ericsson Class B (ERIC-B.ST)",
-            "EVO.ST": "Evolution AB (EVO.ST)",
-            "SEB-A.ST": "Skandinaviska Enskilda Banken (SEB-A.ST)",
-            "INVE-B.ST": "Investor AB Class B (INVE-B.ST)",
-        }
-    },
-    "Denmark 🇩🇰": {
-        "Nasdaq Copenhagen (OMXC25) - Blue Chips": {
-            "NOVO-B.CO": "Novo Nordisk A/S Class B (NOVO-B.CO)",
-            "MAERSK-B.CO": "A.P. Møller - Mærsk A/S (MAERSK-B.CO)",
-            "DSV.CO": "DSV A/S (DSV.CO)",
-            "ORSTED.CO": "Ørsted A/S (ORSTED.CO)",
-            "VWS.CO": "Vestas Wind Systems A/S (VWS.CO)",
-            "CARL-B.CO": "Carlsberg A/S (CARL-B.CO)",
-        }
-    },
-    "Germany 🇩🇪": {
-        "Frankfurt XETRA (DAX 40) - Industrials & Tech": {
-            "SAP.DE": "SAP SE (SAP.DE)",
-            "SIE.DE": "Siemens AG (SIE.DE)",
-            "BMW.DE": "Bayerische Motoren Werke AG (BMW.DE)",
-            "MBG.DE": "Mercedes-Benz Group AG (MBG.DE)",
-            "VOW3.DE": "Volkswagen AG (VOW3.DE)",
-            "ALV.DE": "Allianz SE (ALV.DE)",
-            "AIR.DE": "Airbus SE (AIR.DE)",
-            "IFX.DE": "Infineon Technologies AG (IFX.DE)",
-        }
-    },
-    "France 🇫🇷": {
-        "Euronext Paris (CAC 40) - Luxury & Energy": {
-            "MC.PA": "LVMH Moët Hennessy Louis Vuitton (MC.PA)",
-            "OR.PA": "L'Oréal S.A. (OR.PA)",
-            "RMS.PA": "Hermès International (RMS.PA)",
-            "TTE.PA": "TotalEnergies SE (TTE.PA)",
-            "SAN.PA": "Sanofi S.A. (SAN.PA)",
-            "AIR.PA": "Airbus SE (AIR.PA)",
-            "BNP.PA": "BNP Paribas S.A. (BNP.PA)",
-        }
-    },
-    "Switzerland 🇨🇭": {
-        "SIX Swiss Exchange (SMI) - Market Leaders": {
-            "NESN.SW": "Nestlé S.A. (NESN.SW)",
-            "ROG.SW": "Roche Holding AG (ROG.SW)",
-            "NOVN.SW": "Novartis AG (NOVN.SW)",
-            "UBSG.SW": "UBS Group AG (UBSG.SW)",
-            "CFR.SW": "Compagnie Financière Richemont (CFR.SW)",
-            "ZURN.SW": "Zurich Insurance Group (ZURN.SW)",
-        }
-    },
-    "Japan 🇯🇵": {
-        "Tokyo Stock Exchange (Nikkei 225) - Technology & Auto": {
-            "7203.T": "Toyota Motor Corporation (7203.T)",
-            "6758.T": "Sony Group Corporation (6758.T)",
-            "9984.T": "SoftBank Group Corp. (9984.T)",
-            "8035.T": "Tokyo Electron Ltd. (8035.T)",
-            "6861.T": "Keyence Corporation (6861.T)",
-            "9983.T": "Fast Retailing Co., Ltd. (9983.T)",
-        }
-    },
-    "Canada 🇨🇦": {
-        "Toronto Stock Exchange (TSX) - Energy & Banking": {
-            "SHOP.TO": "Shopify Inc. (SHOP.TO)",
-            "RY.TO": "Royal Bank of Canada (RY.TO)",
-            "TD.TO": "Toronto-Dominion Bank (TD.TO)",
-            "ENB.TO": "Enbridge Inc. (ENB.TO)",
-            "CNQ.TO": "Canadian Natural Resources (CNQ.TO)",
-            "ABX.TO": "Barrick Gold Corp. (ABX.TO)",
-        }
-    },
-    "Australia 🇦🇺": {
-        "Australian Securities Exchange (ASX) - Mining & Banking": {
-            "BHP.AX": "BHP Group Ltd (BHP.AX)",
-            "RIO.AX": "Rio Tinto Ltd (RIO.AX)",
-            "FMG.AX": "Fortescue Ltd (FMG.AX)",
-            "CBA.AX": "Commonwealth Bank of Australia (CBA.AX)",
-            "WDS.AX": "Woodside Energy Group Ltd (WDS.AX)",
-            "CSL.AX": "CSL Ltd (CSL.AX)",
-        }
-    },
-    "India 🇮🇳": {
-        "National Stock Exchange (NSE / Nifty 50)": {
-            "RELIANCE.NS": "Reliance Industries Ltd (RELIANCE.NS)",
-            "TCS.NS": "Tata Consultancy Services (TCS.NS)",
-            "HDFCBANK.NS": "HDFC Bank Ltd (HDFCBANK.NS)",
-            "INFY.NS": "Infosys Ltd (INFY.NS)",
-            "ICICIBANK.NS": "ICICI Bank Ltd (ICICIBANK.NS)",
-            "TATAMOTORS.NS": "Tata Motors Ltd (TATAMOTORS.NS)",
-        }
-    },
-    "Hong Kong / China 🇭🇰🇨🇳": {
-        "Hong Kong Stock Exchange (HKEX) - Tech & Bluechips": {
-            "0700.HK": "Tencent Holdings Ltd (0700.HK)",
-            "9988.HK": "Alibaba Group Holding Ltd (9988.HK)",
-            "3690.HK": "Meituan (3690.HK)",
-            "1211.HK": "BYD Company Ltd (1211.HK)",
-            "0941.HK": "China Mobile Ltd (0941.HK)",
-        }
-    },
-    "Brazil 🇧🇷": {
-        "B3 (Ibovespa) - Resource & Financial Leaders": {
-            "PETR4.SA": "Petróleo Brasileiro S.A. - Petrobras (PETR4.SA)",
-            "VALE3.SA": "Vale S.A. (VALE3.SA)",
-            "ITUB4.SA": "Itaú Unibanco Holding S.A. (ITUB4.SA)",
-            "BBDC4.SA": "Banco Bradesco S.A. (BBDC4.SA)",
-            "ABEV3.SA": "Ambev S.A. (ABEV3.SA)",
-        }
-    },
-}
+# ---------------------------------------------------------
+# 3. AUTHENTICATION HANDLERS
+# ---------------------------------------------------------
+if "user" not in st.session_state:
+    st.session_state.user = None
+if "profile" not in st.session_state:
+    st.session_state.profile = None
 
+def fetch_profile(user_id):
+    res = supabase.table("profiles").select("*").eq("id", user_id).execute()
+    if res.data:
+        return res.data[0]
+    return None
 
-def build_arrow_gauge(score, label_text):
-  """Builds a calibrated semi-circular speedometer with a tapered arrow needle."""
-  score = max(1.0, min(5.0, float(score)))
-  theta_deg = 180.0 - ((score - 1.0) / 4.0) * 180.0
-  theta_rad = math.radians(theta_deg)
+def auth_screen():
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    with col2:
+        st.title("⚡ MarketCatalyst AI")
+        st.caption("Institutional Financial Intelligence | US & Nordic Equities")
+        
+        tab_login, tab_signup = st.tabs(["Sign In", "Create Account"])
+        
+        with tab_login:
+            with st.form("login_form"):
+                email = st.text_input("Work Email")
+                password = st.text_input("Password", type="password")
+                submit = st.form_submit_button("Access Terminal", use_container_width=True)
+                
+                if submit:
+                    try:
+                        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                        st.session_state.user = res.user
+                        st.session_state.profile = fetch_profile(res.user.id)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Authentication Failed: {str(e)}")
 
-  cx, cy = 0.5, 0.12
-  r = 0.38
+        with tab_signup:
+            with st.form("signup_form"):
+                su_name = st.text_input("Full Name")
+                su_email = st.text_input("Work Email")
+                su_password = st.text_input("Create Password", type="password")
+                su_submit = st.form_submit_button("Register Account", use_container_width=True)
+                
+                if su_submit:
+                    try:
+                        res = supabase.auth.sign_up({
+                            "email": su_email,
+                            "password": su_password,
+                            "options": {"data": {"full_name": su_name}}
+                        })
+                        st.success("Account created successfully. You may now sign in.")
+                    except Exception as e:
+                        st.error(f"Registration Failed: {str(e)}")
 
-  nx = cx + r * math.cos(theta_rad)
-  ny = cy + r * math.sin(theta_rad)
+# ---------------------------------------------------------
+# 4. CORE TERMINAL INTERFACE
+# ---------------------------------------------------------
+def render_terminal():
+    user = st.session_state.user
+    profile = st.session_state.profile
+    tier = profile.get("subscription_tier", "free") if profile else "free"
+    
+    # Sidebar Navigation & User Info
+    with st.sidebar:
+        st.markdown(f"**Operator:** `{user.email}`")
+        badge_class = "badge-pro" if tier in ["pro", "institutional"] else "badge-free"
+        st.markdown(f"Tier: <span class='{badge_class}'>{tier.upper()}</span>", unsafe_allow_html=True)
+        st.markdown("---")
+        
+        market_universe = st.radio("Primary Market", ["US Equities (S&P 500 / NASDAQ)", "Norwegian Equities (OSEBX / Euronext)"])
+        default_ticker = "NVDA" if "US" in market_universe else "EQNR.OL"
+        ticker = st.text_input("Ticker Symbol", value=default_ticker).upper().strip()
+        timeframe = st.selectbox("Historical Benchmark Window", ["1mo", "3mo", "6mo", "1y", "2y", "5y"], index=3)
+        
+        st.markdown("---")
+        if st.button("Sign Out", use_container_width=True):
+            supabase.auth.sign_out()
+            st.session_state.user = None
+            st.session_state.profile = None
+            st.rerun()
 
-  b_rad = math.radians(theta_deg + 90)
-  bw = 0.02
-  bx1 = cx + bw * math.cos(b_rad)
-  by1 = cy + bw * math.sin(b_rad)
-  bx2 = cx - bw * math.cos(b_rad)
-  by2 = cy - bw * math.sin(b_rad)
+    # Main Research Dashboard
+    st.subheader(f"⚡ Financial Intelligence Console: {ticker}")
+    
+    # Fetch Market Data via yfinance
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period=timeframe)
+        info = stock.info
+        
+        if hist.empty:
+            st.warning(f"No market series located for symbol `{ticker}`. Verify ticker suffix (e.g., `.OL` for Oslo Børs).")
+            return
 
-  arrow_path = f"M {bx1} {by1} L {nx} {ny} L {bx2} {by2} Z"
+        # Top-level Metric Display
+        c1, c2, c3, c4 = st.columns(4)
+        currency = info.get("currency", "USD")
+        current_price = hist['Close'].iloc[-1]
+        prev_close = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
+        pct_change = ((current_price - prev_close) / prev_close) * 100
+        
+        c1.metric(label=f"Price ({currency})", value=f"{current_price:,.2f}", delta=f"{pct_change:+.2f}%")
+        c2.metric(label="Market Cap", value=f"{info.get('marketCap', 0):,}")
+        c3.metric(label="Trailing P/E", value=f"{info.get('trailingPE', 'N/A')}")
+        c4.metric(label="Dividend Yield", value=f"{(info.get('dividendYield') or 0)*100:.2f}%" if info.get('dividendYield') else "N/A")
 
-  fig = go.Figure()
-  fig.add_trace(
-      go.Indicator(
-          mode="gauge",
-          value=score,
-          domain={"x": [0, 1], "y": [0, 1]},
-          gauge={
-              "axis": {
-                  "range": [1, 5],
-                  "tickvals": [1, 2, 3, 4, 5],
-                  "ticktext": [
-                      "Strong Sell",
-                      "Sell",
-                      "Hold",
-                      "Buy",
-                      "Strong Buy",
-                  ],
-                  "tickcolor": "#94A3B8",
-                  "tickfont": {"size": 10, "color": "#94A3B8"},
-              },
-              "bar": {"color": "rgba(0,0,0,0)"},
-              "bgcolor": "#161B22",
-              "borderwidth": 0,
-              "steps": [
-                  {"range": [1, 2], "color": "#DC2626"},
-                  {"range": [2, 3], "color": "#7F1D1D"},
-                  {"range": [3, 4], "color": "#78350F"},
-                  {"range": [4, 5], "color": "#059669"},
-              ],
-          },
-      )
-  )
+        # Interactive Price Chart
+        fig = go.Figure(data=[go.Candlestick(
+            x=hist.index,
+            open=hist['Open'],
+            high=hist['High'],
+            low=hist['Low'],
+            close=hist['Close'],
+            name=ticker
+        )])
+        fig.update_layout(
+            template="plotly_dark",
+            xaxis_rangeslider_visible=False,
+            height=400,
+            margin=dict(l=10, r=10, t=10, b=10)
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-  fig.add_shape(
-      type="path",
-      path=arrow_path,
-      fillcolor="#00F5D4",
-      line=dict(color="#FFFFFF", width=1),
-      xref="paper",
-      yref="paper",
-  )
-  fig.add_shape(
-      type="circle",
-      x0=cx - 0.028,
-      y0=cy - 0.028,
-      x1=cx + 0.028,
-      y1=cy + 0.028,
-      fillcolor="#F3BA2F",
-      line=dict(color="#0A0F1D", width=2),
-      xref="paper",
-      yref="paper",
-  )
-  fig.add_annotation(
-      x=0.5,
-      y=0.0,
-      text=f"<b>{label_text}</b>",
-      showarrow=False,
-      font=dict(size=18, color="#F3BA2F", family="Inter"),
-      xref="paper",
-      yref="paper",
-  )
-  fig.update_layout(
-      paper_bgcolor="#0A0F1D",
-      height=230,
-      margin=dict(l=20, r=20, t=20, b=10),
-  )
-  return fig
+        # Catalyst & Scenario Intelligence Generation
+        st.markdown("### 📋 Institutional Catalyst Breakdown & Macro Synthesis")
+        analysis_prompt = st.text_area(
+            "Event Trigger / Context Input", 
+            value=f"Evaluate recent earnings disclosures, macro conditions (Fed/Norges Bank policy rates), and margin durability for {ticker}."
+        )
 
+        if st.button("Generate Catalyst Analysis", type="primary"):
+            with st.spinner("Synthesizing multi-source intelligence..."):
+                client = get_gemini_client()
+                
+                system_instruction = (
+                    "You are MarketCatalyst AI, an elite Equity Research Analyst specializing in US and Norwegian equities. "
+                    "Analyze events systematically using: 1. Catalyst Breakdown, 2. Historical Context & Price Action, "
+                    "3. Macro & Sector Drivers (Fed/Norges Bank, rates, FX USD/NOK, Brent oil), "
+                    "4. Fundamental & Dividend Health, 5. Scenario Synthesis (Bull/Bear & Watchpoints). "
+                    "Use precise, institutional terminology, avoid sensationalism, and format with bold headers and scannable bullet points."
+                )
 
-# -------------------------------------------------------------
-# CASCADING GLOBAL MARKET SELECTOR UI
-# -------------------------------------------------------------
-st.markdown("### 🌐 Global Coverage & Asset Directory")
+                prompt = f"""
+                Analyze the following security and event context:
+                - Security: {ticker} ({info.get('longName', ticker)})
+                - Sector/Industry: {info.get('sector', 'N/A')} / {info.get('industry', 'N/A')}
+                - Market: {market_universe}
+                - Recent Close: {current_price:.2f} {currency}
+                - Analysis Objective: {analysis_prompt}
+                """
 
-sel_col1, sel_col2, sel_col3 = st.columns(3)
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        temperature=0.2,
+                    ),
+                )
+                
+                st.markdown("---")
+                st.markdown(response.text)
 
-with sel_col1:
-  selected_country = st.selectbox(
-      "1. Select Country:", list(GLOBAL_MARKETS.keys()), index=0
-  )
+    except Exception as e:
+        st.error(f"Error compiling equity telemetry: {str(e)}")
 
-with sel_col2:
-  available_markets = list(GLOBAL_MARKETS[selected_country].keys())
-  selected_market = st.selectbox(
-      "2. Select Exchange / Sector:", available_markets, index=0
-  )
-
-with sel_col3:
-  tickers_dict = GLOBAL_MARKETS[selected_country][selected_market]
-  ticker_options = list(tickers_dict.keys()) + ["Custom Ticker Entry..."]
-  selected_ticker_option = st.selectbox(
-      "3. Select Listed Equity:",
-      ticker_options,
-      index=0,
-      format_func=lambda x: tickers_dict.get(
-          x, "✏️ Custom Ticker (Type Manually)"
-      ),
-  )
-
-if selected_ticker_option == "Custom Ticker Entry...":
-  ticker_input = (
-      st.text_input(
-          "Enter Global Ticker Symbol:",
-          value="KOG.OL",
-          placeholder="e.g., EQNR.OL, KOG.OL, NVDA, TSLA, SHEL.L, NOVO-B.CO",
-      )
-      .strip()
-      .upper()
-  )
+# ---------------------------------------------------------
+# 5. EXECUTION ROUTER
+# ---------------------------------------------------------
+if st.session_state.user is None:
+    auth_screen()
 else:
-  ticker_input = selected_ticker_option
-
-run_btn = st.button("⚡ Analyze Equity", use_container_width=True)
-
-if ticker_input:
-  if "current_ticker" not in st.session_state:
-    st.session_state.current_ticker = ""
-  if (
-      run_btn
-      or st.session_state.current_ticker != ticker_input
-      or "report_html" not in st.session_state
-  ):
-    st.session_state.current_ticker = ticker_input
-    st.session_state.report_generated = False
-    st.session_state.report_html = ""
-
-  stock = yf.Ticker(ticker_input)
-  info = stock.info or {}
-  hist_1y = stock.history(period="1y")
-
-  if hist_1y.empty:
-    st.error(f"No market telemetry found for ticker: {ticker_input}")
-  else:
-    curr_price = float(
-        info.get("currentPrice")
-        or info.get("regularMarketPrice")
-        or hist_1y["Close"].iloc[-1]
-    )
-    currency = info.get(
-        "currency", "NOK" if ticker_input.endswith(".OL") else "USD"
-    )
-    high_52 = float(
-        info.get("fiftyTwoWeekHigh", round(float(hist_1y["Close"].max()), 2))
-    )
-    low_52 = float(
-        info.get("fiftyTwoWeekLow", round(float(hist_1y["Close"].min()), 2))
-    )
-    sma_200 = (
-        round(float(hist_1y["Close"].rolling(200).mean().iloc[-1]), 2)
-        if len(hist_1y) >= 200
-        else curr_price
-    )
-
-    dma_diff_pct = ((curr_price - sma_200) / sma_200) * 100 if sma_200 else 0.0
-    high_diff_pct = (
-        ((curr_price - high_52) / high_52) * 100 if high_52 else 0.0
-    )
-    low_diff_pct = ((curr_price - low_52) / low_52) * 100 if low_52 else 0.0
-    price_range_span = max(high_52 - low_52, 0.01)
-
-    curr_pos_pct = min(
-        max(((curr_price - low_52) / price_range_span) * 100, 2), 98
-    )
-    dma_pos_pct = min(
-        max(((sma_200 - low_52) / price_range_span) * 100, 2), 98
-    )
-
-    company_name = info.get("longName", ticker_input)
-    sector = info.get("sector", "Equities")
-    industry = info.get("industry", "Financial Markets")
-    now_cest = datetime.datetime.now().strftime("%Y-%m-%d • %H:%M CEST")
-
-    # Target Price Metrics
-    target_mean = float(info.get("targetMeanPrice") or (curr_price * 1.15))
-    target_high = float(info.get("targetHighPrice") or (curr_price * 1.35))
-    target_low = float(info.get("targetLowPrice") or (curr_price * 0.88))
-    num_analysts = int(
-        info.get("numberOfAnalystOpinions")
-        or (24 if ".OL" in ticker_input else 36)
-    )
-
-    rec_raw = str(info.get("recommendationKey", "BUY")).upper()
-    if rec_raw in ["NONE", "N/A", ""]:
-      rec_label = "BUY"
-      dial_score = 4.0
-    else:
-      rec_label = rec_raw.replace("_", " ")
-      rec_mean_score = info.get("recommendationMean")
-      if rec_mean_score is not None:
-        dial_score = max(1.0, min(5.0, 6.0 - float(rec_mean_score)))
-      else:
-        dial_score = (
-            4.2
-            if "BUY" in rec_label
-            else (3.0 if "HOLD" in rec_label else 2.0)
-        )
-
-    target_mean_spread = ((target_mean - curr_price) / curr_price) * 100
-    target_high_spread = ((target_high - curr_price) / curr_price) * 100
-    target_low_spread = ((target_low - curr_price) / curr_price) * 100
-
-    # -------------------------------------------------------------
-    # SECTION 1: DYNAMIC TIMEFRAME CANDLESTICK ENGINE
-    # -------------------------------------------------------------
-    st.markdown(
-        "<h3 style='color:#F3BA2F; margin-top:20px;'>📈 Dynamic Price Action"
-        " Telemetry</h3>",
-        unsafe_allow_html=True,
-    )
-
-    tf_col1, tf_col2 = st.columns([3, 1])
-    with tf_col1:
-      timeframe = st.radio(
-          "Select Timeframe Interval:",
-          ["1m", "5m", "15m", "1h", "1D", "1W", "1M", "1Y"],
-          index=4,
-          horizontal=True,
-      )
-
-    tf_mapping = {
-        "1m": {"period": "5d", "interval": "1m"},
-        "5m": {"period": "1mo", "interval": "5m"},
-        "15m": {"period": "1mo", "interval": "15m"},
-        "1h": {"period": "3mo", "interval": "1h"},
-        "1D": {"period": "1y", "interval": "1d"},
-        "1W": {"period": "5y", "interval": "1wk"},
-        "1M": {"period": "max", "interval": "1mo"},
-        "1Y": {"period": "max", "interval": "3mo"},
-    }
-
-    tf_cfg = tf_mapping[timeframe]
-    chart_data = stock.history(
-        period=tf_cfg["period"], interval=tf_cfg["interval"]
-    )
-    if chart_data.empty:
-      chart_data = hist_1y
-
-    chart_fig = make_subplots(
-        rows=2,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.03,
-        row_heights=[0.75, 0.25],
-    )
-    chart_fig.add_trace(
-        go.Candlestick(
-            x=chart_data.index,
-            open=chart_data["Open"],
-            high=chart_data["High"],
-            low=chart_data["Low"],
-            close=chart_data["Close"],
-            name=f"Price ({timeframe})",
-            increasing_line_color="#059669",
-            decreasing_line_color="#DC2626",
-        ),
-        row=1,
-        col=1,
-    )
-    if len(chart_data) >= 50:
-      sma_line = chart_data["Close"].rolling(window=50).mean()
-      chart_fig.add_trace(
-          go.Scatter(
-              x=chart_data.index,
-              y=sma_line,
-              mode="lines",
-              line=dict(color="#0284C7", width=1.5),
-              name="50-Period SMA",
-          ),
-          row=1,
-          col=1,
-      )
-    chart_fig.add_trace(
-        go.Bar(
-            x=chart_data.index,
-            y=chart_data["Volume"],
-            name="Volume",
-            marker_color="#475569",
-        ),
-        row=2,
-        col=1,
-    )
-    chart_fig.update_layout(
-        title=f"{company_name} ({ticker_input}) • Interval: {timeframe}",
-        paper_bgcolor="#0A0F1D",
-        plot_bgcolor="#161B22",
-        font=dict(color="#94A3B8"),
-        height=400,
-        xaxis_rangeslider_visible=False,
-        margin=dict(l=10, r=10, t=40, b=10),
-    )
-    chart_fig.update_xaxes(gridcolor="#21262D")
-    chart_fig.update_yaxes(gridcolor="#21262D")
-    st.plotly_chart(chart_fig, use_container_width=True)
-
-    # -------------------------------------------------------------
-    # SECTION 2: EXTERNAL RATINGS SPEEDOMETER & PRICE TARGET CONE
-    # -------------------------------------------------------------
-    st.markdown(
-        "<h3 style='color:#F3BA2F; margin-top:20px;'>📊 External Analyst"
-        " Ratings &amp; 12-Month Target Cone</h3>",
-        unsafe_allow_html=True,
-    )
-    m_col1, m_col2 = st.columns([1, 1.4])
-
-    with m_col1:
-      st.plotly_chart(
-          build_arrow_gauge(dial_score, rec_label), use_container_width=True
-      )
-
-      p_sb = 62 if "BUY" in rec_label else 20
-      p_b = 18 if "BUY" in rec_label else 25
-      p_h = 15 if "HOLD" in rec_label else 35
-      p_s, p_ss = 3, 2
-
-      dist_html = f"""
-            <div style="background:#161B22; border:1px solid #30363D; border-radius:10px; padding:12px; font-family:'Inter', sans-serif;">
-                <div style="display:flex; justify-content:space-between; font-size:11px; color:#94A3B8; margin-bottom:8px; font-weight:600;">
-                    <span>Ratings distribution • {num_analysts} institutional analysts</span>
-                    <span style="color:#00F5D4;">{p_sb + p_b}% Bullish</span>
-                </div>
-                <div style="margin-bottom:6px;">
-                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
-                        <span style="color:#10B981; font-weight:600;">Strong Buy</span><span>{p_sb}%</span>
-                    </div>
-                    <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
-                        <div style="width:{p_sb}%; height:100%; background:#10B981;"></div>
-                    </div>
-                </div>
-                <div style="margin-bottom:6px;">
-                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
-                        <span style="color:#34D399; font-weight:600;">Buy</span><span>{p_b}%</span>
-                    </div>
-                    <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
-                        <div style="width:{p_b}%; height:100%; background:#34D399;"></div>
-                    </div>
-                </div>
-                <div style="margin-bottom:6px;">
-                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
-                        <span style="color:#60A5FA; font-weight:600;">Hold</span><span>{p_h}%</span>
-                    </div>
-                    <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
-                        <div style="width:{p_h}%; height:100%; background:#60A5FA;"></div>
-                    </div>
-                </div>
-                <div style="margin-bottom:6px;">
-                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
-                        <span style="color:#F87171; font-weight:600;">Sell</span><span>{p_s}%</span>
-                    </div>
-                    <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
-                        <div style="width:{p_s}%; height:100%; background:#F87171;"></div>
-                    </div>
-                </div>
-                <div>
-                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
-                        <span style="color:#EF4444; font-weight:600;">Strong Sell</span><span>{p_ss}%</span>
-                    </div>
-                    <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
-                        <div style="width:{p_ss}%; height:100%; background:#EF4444;"></div>
-                    </div>
-                </div>
-                <div style="margin-top:10px; font-size:9px; color:#64748B; border-top:1px solid #21262D; padding-top:6px;">
-                    Benchmarked via DNB Carnegie, Pareto, Arctic, ABGSC, FactSet &amp; LSEG I/B/E/S consensus.
-                </div>
-            </div>
-            """
-      st.markdown(dist_html, unsafe_allow_html=True)
-
-    with m_col2:
-      last_date = hist_1y.index[-1]
-      proj_dates = [
-          last_date,
-          last_date + datetime.timedelta(days=180),
-          last_date + datetime.timedelta(days=365),
-      ]
-      recent_hist = hist_1y.tail(90)
-
-      cone_fig = go.Figure()
-      cone_fig.add_trace(
-          go.Scatter(
-              x=recent_hist.index,
-              y=recent_hist["Close"],
-              mode="lines",
-              line=dict(color="#00F5D4", width=2.2),
-              name="Historical Price",
-          )
-      )
-      cone_fig.add_trace(
-          go.Scatter(
-              x=proj_dates,
-              y=[curr_price, (curr_price + target_high) / 2, target_high],
-              mode="lines+markers",
-              line=dict(color="#10B981", width=1.8, dash="dot"),
-              name=f"High: {target_high:.2f} ({target_high_spread:+.1f}%)",
-          )
-      )
-      cone_fig.add_trace(
-          go.Scatter(
-              x=proj_dates,
-              y=[curr_price, (curr_price + target_mean) / 2, target_mean],
-              mode="lines+markers",
-              line=dict(color="#38BDF8", width=2.5, dash="dash"),
-              name=f"Avg: {target_mean:.2f} ({target_mean_spread:+.1f}%)",
-          )
-      )
-      cone_fig.add_trace(
-          go.Scatter(
-              x=proj_dates,
-              y=[curr_price, (curr_price + target_low) / 2, target_low],
-              mode="lines+markers",
-              line=dict(color="#EF4444", width=1.8, dash="dot"),
-              name=f"Low: {target_low:.2f} ({target_low_spread:+.1f}%)",
-          )
-      )
-      cone_fig.update_layout(
-          title=dict(
-              text=(
-                  f"<b>12-Month Price Target Cone</b> • Avg: {target_mean:.2f}"
-                  f" {currency} ({target_mean_spread:+.1f}%)"
-              ),
-              font=dict(size=14, color="#FFFFFF"),
-          ),
-          paper_bgcolor="#0A0F1D",
-          plot_bgcolor="#161B22",
-          font=dict(color="#94A3B8"),
-          height=410,
-          margin=dict(l=10, r=10, t=40, b=20),
-          legend=dict(
-              orientation="h",
-              yanchor="bottom",
-              y=1.02,
-              xanchor="right",
-              x=1,
-              font=dict(size=10),
-          ),
-      )
-      cone_fig.update_xaxes(gridcolor="#21262D")
-      cone_fig.update_yaxes(gridcolor="#21262D")
-      st.plotly_chart(cone_fig, use_container_width=True)
-
-    # -------------------------------------------------------------
-    # SECTION 3: INSTITUTIONAL RESEARCH REPORT (GEMINI)
-    # -------------------------------------------------------------
-    if not st.session_state.get("report_generated", False):
-      with st.spinner(
-          f"Synthesizing institutional research note for {ticker_input}..."
-      ):
-        market_context = f"""
-                Ticker: {ticker_input}
-                Company Name: {company_name}
-                Sector: {sector} | Industry: {industry}
-                Current Price: {curr_price:.2f} {currency}
-                200-Day Moving Average: {sma_200:.2f} {currency} (Spread: {dma_diff_pct:+.2f}%)
-                52-Week Range: {low_52:.2f} to {high_52:.2f} {currency}
-                Market Cap: {info.get('marketCap', 'N/A')} {currency}
-                Forward P/E: {info.get('forwardPE', 'N/A')} | Trailing P/E: {info.get('trailingPE', 'N/A')}
-                Dividend Yield: {f"{info.get('dividendYield', 0) * 100:.2f}%" if info.get('dividendYield') else 'N/A'}
-                Consensus Target: {target_mean:.2f} {currency} (Spread: {target_mean_spread:+.1f}%) | Consensus Bias: {rec_label}
-                """
-
-        system_prompt = """
-                # Role & Identity
-                You are MarketCatalyst AI, an elite Equity Research Analyst covering global financial markets, US equities (S&P 500, NASDAQ), and Norwegian equities (Oslo Børs / OSEBX).
-                Structure high-density institutional intelligence strictly using these exact output markers:
-
-                [PRIMARY_STANCE]
-                (🟢 OVERWEIGHT / BUY BIAS | 🟡 NEUTRAL / HOLD BIAS | 🔴 UNDERWEIGHT / REDUCE BIAS | 🟡 CONSOLIDATION / 200-DMA TEST)
-
-                [CATALYST_BREAKDOWN]
-                (Provide 3 structured HTML blocks styled as:
-                <div class="p-3 bg-slate-50/80 rounded-lg border-l-2 border-sky-500"><strong class="text-slate-900 block font-semibold mb-1">Trigger Headline</strong>In-depth institutional catalyst analysis.</div>)
-
-                [TECHNICAL_DYNAMICS]
-                (Provide 2 structured HTML blocks styled as:
-                <div class="p-3 bg-amber-50/60 rounded-lg border-l-2 border-amber-500"><strong class="text-slate-900 block font-semibold mb-1">Technical Pivot</strong>Mean reversion analysis relative to 200-DMA.</div>)
-
-                [MACRO_SENSITIVITY]
-                (Provide 3 <li> items detailing central bank stance, FX currency drivers, and commodity/sector dynamics:
-                <li class="flex items-start gap-2.5"><i data-lucide="check-circle-2" class="w-4 h-4 text-sky-700 shrink-0 mt-0.5"></i><div><strong class="text-slate-800">Macro Factor:</strong> Analysis.</div></li>)
-
-                [FUNDAMENTAL_HEALTH]
-                (Provide 3 <li> items on backlog conversion, balance sheet debt, and cash distribution safety:
-                <li class="flex items-start gap-2.5"><i data-lucide="layers" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i><div><strong class="text-slate-800">Balance Sheet:</strong> Analysis.</div></li>)
-
-                [BULL_CASE]
-                (Provide 3 numbered list items:
-                <li class="flex items-start gap-2"><span class="font-mono font-bold text-emerald-700 bg-white px-1.5 py-0.5 rounded border border-emerald-200 shadow-xs">1</span><span><strong>Upside Trigger:</strong> Detailed thesis.</span></li>)
-
-                [BEAR_CASE]
-                (Provide 3 numbered list items:
-                <li class="flex items-start gap-2"><span class="font-mono font-bold text-rose-700 bg-white px-1.5 py-0.5 rounded border border-rose-200 shadow-xs">1</span><span><strong>Downside Risk:</strong> Detailed thesis.</span></li>)
-
-                [TECHNICAL_PIVOT]
-                (Single concise technical line on 200-DMA support / resistance)
-
-                [CORP_EVENTS]
-                (Upcoming earnings release and dividend record milestones)
-
-                [MACRO_DATA]
-                (Central bank rate decisions and macroeconomic filings)
-                """
-
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        candidate_models = [
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-        ]
-        response = None
-        for mod in candidate_models:
-          try:
-            response = client.models.generate_content(
-                model=mod, contents=[system_prompt, market_context]
-            )
-            if response and response.text:
-              break
-          except Exception:
-            continue
-
-        res_text = response.text if response else ""
-
-        def extract_tag(text, tag, fallback=""):
-          try:
-            pattern = rf"\[{tag}\](.*?)(?=\[[A-Z_]+\]|$)"
-            match = re.search(pattern, text, re.DOTALL)
-            if match:
-              return match.group(1).strip()
-          except Exception:
-            pass
-          return fallback
-
-        primary_stance = extract_tag(
-            res_text, "PRIMARY_STANCE", "🟡 CONSOLIDATION / 200-DMA TEST"
-        )
-        cat_breakdown = extract_tag(
-            res_text,
-            "CATALYST_BREAKDOWN",
-            '<div class="p-3 bg-slate-50/80 rounded-lg border-l-2'
-            ' border-sky-500"><strong class="text-slate-900 block font-semibold'
-            ' mb-1">Backlog Execution</strong>Multi-year pipeline conversion in'
-            " progress.</div>",
-        )
-        tech_dynamics = extract_tag(
-            res_text,
-            "TECHNICAL_DYNAMICS",
-            '<div class="p-3 bg-amber-50/60 rounded-lg border-l-2'
-            ' border-amber-500"><strong class="text-slate-900 block'
-            ' font-semibold mb-1">Support Confluence</strong>Testing 200-DMA'
-            " institutional floor.</div>",
-        )
-        macro_sensitivity = extract_tag(
-            res_text,
-            "MACRO_SENSITIVITY",
-            '<li class="flex items-start gap-2.5"><i data-lucide="check-circle-2"'
-            ' class="w-4 h-4 text-sky-700 shrink-0 mt-0.5"></i><div><strong'
-            ' class="text-slate-800">FX & Macro Exposure:</strong> Monetary and'
-            " currency translation dynamics active.</div></li>",
-        )
-        fundamental_health = extract_tag(
-            res_text,
-            "FUNDAMENTAL_HEALTH",
-            '<li class="flex items-start gap-2.5"><i data-lucide="layers"'
-            ' class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i><div><strong'
-            ' class="text-slate-800">Cash Flow:</strong> Capital allocation and'
-            " balance sheet liquidity maintained.</div></li>",
-        )
-        bull_case = extract_tag(
-            res_text,
-            "BULL_CASE",
-            '<li class="flex items-start gap-2"><span class="font-mono font-bold'
-            " text-emerald-700 bg-white px-1.5 py-0.5 rounded border"
-            ' border-emerald-200 shadow-xs">1</span><span><strong>Expansion:</strong>'
-            " Upside demand acceleration.</span></li>",
-        )
-        bear_case = extract_tag(
-            res_text,
-            "BEAR_CASE",
-            '<li class="flex items-start gap-2"><span class="font-mono font-bold'
-            " text-rose-700 bg-white px-1.5 py-0.5 rounded border"
-            ' border-rose-200 shadow-xs">1</span><span><strong>Bottlenecks:</strong>'
-            " Execution drag and cost inflation.</span></li>",
-        )
-        watch_pivot = extract_tag(
-            res_text,
-            "TECHNICAL_PIVOT",
-            f"Daily close relative to {sma_200:.2f} {currency} (200-DMA).",
-        )
-        watch_corp = extract_tag(
-            res_text,
-            "CORP_EVENTS",
-            "Next quarterly financial print & dividend record dates.",
-        )
-        watch_macro = extract_tag(
-            res_text,
-            "MACRO_DATA",
-            "Central bank policy rate announcements and energy reports.",
-        )
-
-        rendered_html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <style>
-    body {{ font-family: 'Inter', sans-serif; }}
-    @media print {{
-      @page {{ size: A4 portrait; margin: 10mm; }}
-      body {{ background-color: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-      .no-print {{ display: none !important; }}
-      .avoid-break {{ break-inside: avoid; page-break-inside: avoid; }}
-    }}
-  </style>
-</head>
-<body class="bg-slate-100 text-slate-800 antialiased py-6 px-2 sm:px-4">
-  <div class="max-w-5xl mx-auto mb-4 flex justify-between items-center no-print">
-    <div class="flex items-center gap-2 text-xs text-slate-500 font-medium">
-      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-      Iserve Institutional Research Spec &bull; MAR Compliant v3.0
-    </div>
-    <button onclick="window.print()" class="inline-flex items-center gap-2 bg-[#0B192C] hover:bg-slate-800 text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow transition">
-      <i data-lucide="printer" class="w-4 h-4"></i> Export / Print Institutional PDF
-    </button>
-  </div>
-
-  <div class="max-w-5xl mx-auto bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden">
-    <header class="bg-[#0B192C] text-white px-8 pt-7 pb-6 border-b-4 border-amber-500">
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-        <div>
-          <span class="text-[11px] tracking-widest uppercase font-bold text-amber-400">Iserve &bull; Equity Research &amp; Market Intelligence</span>
-          <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
-            {company_name}
-            <span class="text-xs font-bold text-amber-300 bg-white/10 px-2.5 py-1 rounded border border-white/15 font-mono">{ticker_input}</span>
-          </h1>
-          <p class="text-xs text-slate-300 mt-1 flex items-center gap-2">
-            <i data-lucide="calendar" class="w-3.5 h-3.5 text-slate-400"></i> Generated: {now_cest} &bull; Sector: {sector} / {industry}
-          </p>
-        </div>
-        <div class="text-left md:text-right">
-          <span class="text-[10px] font-bold tracking-wider uppercase text-slate-400">Institutional Consensus</span>
-          <div class="text-sm font-bold text-amber-300 flex items-center gap-1.5 md:justify-end mt-0.5">
-            <i data-lucide="activity" class="w-4 h-4"></i> {primary_stance}
-          </div>
-          <span class="text-[10px] text-slate-400 mt-1 block">12M Target: <strong class="text-white font-mono">{target_mean:.2f} {currency} ({target_mean_spread:+.1f}%)</strong></span>
-        </div>
-      </div>
-    </header>
-
-    <div class="p-8 space-y-8">
-      <section class="avoid-break">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-1.5 h-full bg-sky-500"></div>
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Current Price</p>
-            <div class="text-2xl font-black font-mono text-slate-900 mt-1">{curr_price:.2f} <span class="text-xs font-semibold text-slate-500">{currency}</span></div>
-            <p class="text-[11px] text-emerald-600 font-semibold mt-1">{dma_diff_pct:+.2f}% vs 200-DMA</p>
-          </div>
-          <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-1.5 h-full bg-amber-500"></div>
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">200-Day Moving Avg</p>
-            <div class="text-2xl font-black font-mono text-slate-800 mt-1">{sma_200:.2f} <span class="text-xs font-semibold text-slate-500">{currency}</span></div>
-            <p class="text-[11px] text-amber-600 font-semibold mt-1">Core Trend Pivot</p>
-          </div>
-          <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-1.5 h-full bg-emerald-500"></div>
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">52-Week Low</p>
-            <div class="text-2xl font-black font-mono text-slate-800 mt-1">{low_52:.2f} <span class="text-xs font-semibold text-slate-500">{currency}</span></div>
-            <p class="text-[11px] text-emerald-600 font-semibold mt-1">{low_diff_pct:+.2f}% from Trough</p>
-          </div>
-          <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-1.5 h-full bg-rose-500"></div>
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">52-Week High</p>
-            <div class="text-2xl font-black font-mono text-slate-800 mt-1">{high_52:.2f} <span class="text-xs font-semibold text-slate-500">{currency}</span></div>
-            <p class="text-[11px] text-rose-600 font-semibold mt-1">{high_diff_pct:+.2f}% from Peak</p>
-          </div>
-        </div>
-
-        <div class="bg-slate-50 p-5 rounded-xl border border-slate-200">
-          <div class="flex items-center justify-between text-xs font-semibold text-slate-700 mb-2">
-            <span class="flex items-center gap-1.5 font-bold">
-              <i data-lucide="sliders-horizontal" class="w-4 h-4 text-sky-700"></i> 52-Week Price Spectrum &amp; Support Position
-            </span>
-            <span class="text-[11px] font-mono text-slate-500">Trading Range Span: {price_range_span:.2f} {currency}</span>
-          </div>
-          <div class="relative pt-6 pb-2">
-            <div class="h-3 w-full bg-gradient-to-r from-emerald-200 via-amber-200 to-rose-200 rounded-full relative">
-              <div class="absolute top-1/2 -translate-y-1/2 left-[{dma_pos_pct:.1f}%] w-1.5 h-5 bg-slate-700 rounded-sm z-10">
-                <div class="absolute -bottom-6 -left-10 text-[10px] font-bold font-mono text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-300 shadow-sm whitespace-nowrap">
-                  200-DMA: {sma_200:.2f}
-                </div>
-              </div>
-              <div class="absolute top-1/2 -translate-y-1/2 left-[{curr_pos_pct:.1f}%] -translate-x-1/2 z-20">
-                <div class="w-5 h-5 bg-[#0B192C] border-2 border-white rounded-full shadow-lg flex items-center justify-center">
-                  <div class="w-1.5 h-1.5 bg-amber-400 rounded-full"></div>
-                </div>
-                <div class="absolute -top-6 -left-12 text-[10px] font-black font-mono text-white bg-[#0B192C] px-2 py-0.5 rounded shadow whitespace-nowrap">
-                  Current: {curr_price:.2f}
-                </div>
-              </div>
-            </div>
-            <div class="flex justify-between items-center mt-7 text-xs font-mono font-bold text-slate-700">
-              <div><span class="block text-[10px] uppercase font-sans font-semibold text-slate-400">52W Floor</span>{low_52:.2f} {currency}</div>
-              <div class="text-right"><span class="block text-[10px] uppercase font-sans font-semibold text-slate-400">52W Peak</span>{high_52:.2f} {currency}</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="grid grid-cols-1 md:grid-cols-2 gap-6 avoid-break">
-        <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-          <div class="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-            <span class="w-6 h-6 rounded bg-sky-100 text-sky-700 flex items-center justify-center text-xs font-bold font-mono">01</span>
-            <h2 class="text-base font-bold text-slate-900">Catalyst Breakdown</h2>
-          </div>
-          <div class="space-y-4 text-xs leading-relaxed text-slate-600">{cat_breakdown}</div>
-        </div>
-        <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <div class="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-              <span class="w-6 h-6 rounded bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold font-mono">02</span>
-              <h2 class="text-base font-bold text-slate-900">Technical Price Dynamics</h2>
-            </div>
-            <div class="space-y-4 text-xs leading-relaxed text-slate-600">{tech_dynamics}</div>
-          </div>
-          <div class="mt-4 p-3 bg-[#0B192C] text-white rounded-lg text-[11px] font-mono flex items-center justify-between shadow-inner">
-            <span class="text-slate-300 flex items-center gap-1.5"><i data-lucide="shield-alert" class="w-3.5 h-3.5 text-amber-400"></i> Key Support Pivot:</span>
-            <span class="font-bold text-amber-400 text-xs">{sma_200:.2f} {currency} (200-DMA)</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="grid grid-cols-1 md:grid-cols-2 gap-6 avoid-break">
-        <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-          <div class="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-            <span class="w-6 h-6 rounded bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold font-mono">03</span>
-            <h2 class="text-base font-bold text-slate-900">Macro &amp; FX Sensitivity</h2>
-          </div>
-          <ul class="space-y-3 text-xs text-slate-600">{macro_sensitivity}</ul>
-        </div>
-        <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-          <div class="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-            <span class="w-6 h-6 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold font-mono">04</span>
-            <h2 class="text-base font-bold text-slate-900">Fundamental &amp; Balance Sheet</h2>
-          </div>
-          <ul class="space-y-3 text-xs text-slate-600">{fundamental_health}</ul>
-        </div>
-      </section>
-
-      <section class="avoid-break">
-        <div class="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-          <span class="w-6 h-6 rounded bg-slate-900 text-white flex items-center justify-center text-xs font-bold font-mono">05</span>
-          <h2 class="text-base font-bold text-slate-900">Scenario Synthesis &amp; Risk Matrix</h2>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="bg-emerald-50/60 border border-emerald-200 rounded-xl p-5 shadow-sm">
-            <div class="flex items-center gap-2 text-emerald-800 font-bold text-sm mb-3 pb-2 border-b border-emerald-100">
-              <i data-lucide="trending-up" class="w-4 h-4 text-emerald-600"></i> Bull Case Upside Catalysts
-            </div>
-            <ol class="space-y-2.5 text-xs text-slate-700">{bull_case}</ol>
-          </div>
-          <div class="bg-rose-50/60 border border-rose-200 rounded-xl p-5 shadow-sm">
-            <div class="flex items-center gap-2 text-rose-800 font-bold text-sm mb-3 pb-2 border-b border-rose-100">
-              <i data-lucide="trending-down" class="w-4 h-4 text-rose-600"></i> Bear Case Downside Risks
-            </div>
-            <ol class="space-y-2.5 text-xs text-slate-700">{bear_case}</ol>
-          </div>
-        </div>
-      </section>
-
-      <section class="bg-[#0B192C] text-white rounded-xl p-5 shadow-md avoid-break">
-        <h3 class="text-xs font-bold tracking-wider uppercase text-amber-400 mb-3 flex items-center gap-1.5">
-          <i data-lucide="radar" class="w-4 h-4"></i> Key Institutional Watchpoints &amp; Triggers
-        </h3>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-          <div class="p-3 bg-white/5 rounded-lg border border-white/10">
-            <span class="text-slate-400 block text-[10px] uppercase font-bold">Technical Pivot</span>
-            <p class="font-semibold mt-1 text-slate-200">{watch_pivot}</p>
-          </div>
-          <div class="p-3 bg-white/5 rounded-lg border border-white/10">
-            <span class="text-slate-400 block text-[10px] uppercase font-bold">Corporate Events</span>
-            <p class="font-semibold mt-1 text-slate-200">{watch_corp}</p>
-          </div>
-          <div class="p-3 bg-white/5 rounded-lg border border-white/10">
-            <span class="text-slate-400 block text-[10px] uppercase font-bold">Macro Data</span>
-            <p class="font-semibold mt-1 text-slate-200">{watch_macro}</p>
-          </div>
-        </div>
-      </section>
-
-      <footer class="pt-6 border-t border-slate-200 text-[10px] text-slate-500 leading-relaxed space-y-2 avoid-break">
-        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center font-semibold text-slate-700 pb-2 border-b border-slate-100">
-          <span class="flex items-center gap-1.5">
-            <strong class="text-slate-900">Iserve</strong> &bull; Independent Equity Research &amp; Market Intelligence
-          </span>
-          <span class="text-slate-500">Regulatory Framework: MAR / EEA Compliant</span>
-        </div>
-        <p><strong>Important Information &amp; Research Disclaimer:</strong> This document is prepared for informational and educational purposes only and does not constitute personalized investment advice, financial endorsement, or an offer to buy/sell securities. {ticker_input} market data as of timestamp.</p>
-        <div class="text-center font-bold text-slate-400 pt-2 tracking-widest uppercase text-[9px]">
-          We Serve, You Prosper &bull; Iserve &copy; 2026
-        </div>
-      </footer>
-    </div>
-  </div>
-  <script>lucide.createIcons();</script>
-</body>
-</html>"""
-        st.session_state.report_html = rendered_html
-        st.session_state.report_generated = True
-
-    if (
-        "report_html" in st.session_state
-        and isinstance(st.session_state.report_html, str)
-        and len(st.session_state.report_html) > 0
-    ):
-      components.html(st.session_state.report_html, height=1450, scrolling=True)
+    render_terminal()
