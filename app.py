@@ -59,15 +59,15 @@ def auth_screen():
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         st.title("⚡ MarketCatalyst AI")
-        st.caption("Institutional Financial Intelligence | US & Nordic Equities")
+        st.caption("Event-Driven Equity Research & Global Market Intelligence")
         
         tab_login, tab_signup = st.tabs(["Sign In", "Create Account"])
         
         with tab_login:
             with st.form("login_form"):
-                email = st.text_input("Work Email")
+                email = st.text_input("Email")
                 password = st.text_input("Password", type="password")
-                submit = st.form_submit_button("Access Terminal", use_container_width=True)
+                submit = st.form_submit_button("Sign in", use_container_width=True)
                 
                 if submit:
                     try:
@@ -81,9 +81,9 @@ def auth_screen():
         with tab_signup:
             with st.form("signup_form"):
                 su_name = st.text_input("Full Name")
-                su_email = st.text_input("Work Email")
-                su_password = st.text_input("Create Password", type="password")
-                su_submit = st.form_submit_button("Register Account", use_container_width=True)
+                su_email = st.text_input("Email")
+                su_password = st.text_input("Password", type="password")
+                su_submit = st.form_submit_button("Create Account", use_container_width=True)
                 
                 if su_submit:
                     try:
@@ -92,7 +92,7 @@ def auth_screen():
                             "password": su_password,
                             "options": {"data": {"full_name": su_name}}
                         })
-                        st.success("Account created successfully. You may now sign in.")
+                        st.success("Account created successfully. Please switch to the Sign In tab to enter.")
                     except Exception as e:
                         st.error(f"Registration Failed: {str(e)}")
 
@@ -104,7 +104,6 @@ def render_terminal():
     profile = st.session_state.profile
     tier = profile.get("subscription_tier", "free") if profile else "free"
     
-    # Sidebar Navigation & User Info
     with st.sidebar:
         st.markdown(f"**Operator:** `{user.email}`")
         badge_class = "badge-pro" if tier in ["pro", "institutional"] else "badge-free"
@@ -123,10 +122,8 @@ def render_terminal():
             st.session_state.profile = None
             st.rerun()
 
-    # Main Research Dashboard
     st.subheader(f"⚡ Financial Intelligence Console: {ticker}")
     
-    # Fetch Market Data via yfinance
     try:
         stock = yf.Ticker(ticker)
         hist = stock.history(period=timeframe)
@@ -136,7 +133,6 @@ def render_terminal():
             st.warning(f"No market series located for symbol `{ticker}`. Verify ticker suffix (e.g., `.OL` for Oslo Børs).")
             return
 
-        # Top-level Metric Display
         c1, c2, c3, c4 = st.columns(4)
         currency = info.get("currency", "USD")
         current_price = hist['Close'].iloc[-1]
@@ -148,7 +144,6 @@ def render_terminal():
         c3.metric(label="Trailing P/E", value=f"{info.get('trailingPE', 'N/A')}")
         c4.metric(label="Dividend Yield", value=f"{(info.get('dividendYield') or 0)*100:.2f}%" if info.get('dividendYield') else "N/A")
 
-        # Interactive Price Chart
         fig = go.Figure(data=[go.Candlestick(
             x=hist.index,
             open=hist['Open'],
@@ -165,7 +160,6 @@ def render_terminal():
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # Catalyst & Scenario Intelligence Generation
         st.markdown("### 📋 Institutional Catalyst Breakdown & Macro Synthesis")
         analysis_prompt = st.text_area(
             "Event Trigger / Context Input", 
