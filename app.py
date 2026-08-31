@@ -1,7 +1,5 @@
 import os
-import re
 import streamlit as st
-from supabase import create_client, Client
 from google import genai
 from google.genai import types
 import yfinance as yf
@@ -28,56 +26,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. CLIENT INITIALIZATION (DYNAMIC SECRETS BINDING)
+# 2. LOCAL USER STORE & GEMINI CLIENT
 # ---------------------------------------------------------
-def get_supabase_credentials():
-    raw_url = st.secrets.get("supabase", {}).get("url", "")
-    raw_key = st.secrets.get("supabase", {}).get("key", "")
-    
-    # Fallback to flat secret keys if nested table wasn't used
-    if not raw_url:
-        raw_url = st.secrets.get("SUPABASE_URL", "")
-    if not raw_key:
-        raw_key = st.secrets.get("SUPABASE_KEY", "")
-        
-    clean_url = str(raw_url).strip().strip('"\'').rstrip("/")
-    clean_key = str(raw_key).strip().strip('"\'')
-    
-    return clean_url, clean_key
+if "users_db" not in st.session_state:
+    # Default master account
+    st.session_state.users_db = {
+        "preetam@isewa.no": {"name": "Preetam Pandey", "password": "!Pre3t4m2020", "tier": "institutional"}
+    }
 
-@st.cache_resource
-def init_supabase() -> Client:
-    url, key = get_supabase_credentials()
-    if not url or not key:
-        raise ValueError("Supabase URL or Key is missing from Streamlit Secrets.")
-    return create_client(url, key)
-
-try:
-    supabase = init_supabase()
-except Exception as e:
-    st.error(f"Supabase Initialization Error: {str(e)}")
+if "logged_user" not in st.session_state:
+    st.session_state.logged_user = None
 
 def get_gemini_client():
     api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
     return genai.Client(api_key=api_key)
 
 # ---------------------------------------------------------
-# 3. AUTHENTICATION HANDLERS
+# 3. AUTHENTICATION SCREENS
 # ---------------------------------------------------------
-if "user" not in st.session_state:
-    st.session_state.user = None
-if "profile" not in st.session_state:
-    st.session_state.profile = None
-
-def fetch_profile(user_id):
-    try:
-        res = supabase.table("profiles").select("*").eq("id", user_id).execute()
-        if res.data and len(res.data) > 0:
-            return res.data[0]
-    except Exception:
-        pass
-    return None
-
 def auth_screen():
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
@@ -88,47 +54,52 @@ def auth_screen():
         
         with tab_login:
             with st.form("login_form"):
-                email = st.text_input("Email")
+                email = st.text_input("Email").strip().lower()
                 password = st.text_input("Password", type="password")
                 submit = st.form_submit_button("Sign in", use_container_width=True)
                 
                 if submit:
-                    try:
-                        res = supabase.auth.sign_in_with_password({"email": email.strip(), "password": password})
-                        st.session_state.user = res.user
-                        st.session_state.profile = fetch_profile(res.user.id)
+                    user_data = st.session_state.users_db.get(email)
+                    if user_data and user_data["password"] == password:
+                        st.session_state.logged_user = {
+                            "email": email,
+                            "name": user_data["name"],
+                            "tier": user_data["tier"]
+                        }
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"Sign in failed: {str(e)}")
+                    else:
+                        st.error("Invalid email or password.")
 
         with tab_signup:
             with st.form("signup_form"):
-                su_name = st.text_input("Full Name")
-                su_email = st.text_input("Email")
+                su_name = st.text_input("Full Name").strip()
+                su_email = st.text_input("Email").strip().lower()
                 su_password = st.text_input("Password", type="password")
                 su_submit = st.form_submit_button("Create Account", use_container_width=True)
                 
                 if su_submit:
-                    try:
-                        res = supabase.auth.sign_up({
-                            "email": su_email.strip(),
+                    if not su_email or not su_password:
+                        st.warning("Please fill in all fields.")
+                    elif su_email in st.session_state.users_db:
+                        st.error("Account already exists with this email.")
+                    else:
+                        st.session_state.users_db[su_email] = {
+                            "name": su_name,
                             "password": su_password,
-                            "options": {"data": {"full_name": su_name.strip()}}
-                        })
-                        st.success("Account created successfully. Please switch to the 'Sign In' tab to proceed.")
-                    except Exception as e:
-                        st.error(f"Account creation failed: {str(e)}")
+                            "tier": "pro"
+                        }
+                        st.success("Account created successfully. Switch to 'Sign In' to enter.")
 
 # ---------------------------------------------------------
 # 4. CORE TERMINAL INTERFACE
 # ---------------------------------------------------------
 def render_terminal():
-    user = st.session_state.user
-    profile = st.session_state.profile
-    tier = profile.get("subscription_tier", "free") if profile else "free"
+    user = st.session_state.logged_user
+    tier = user.get("tier", "pro")
     
     with st.sidebar:
-        st.markdown(f"**Operator:** `{user.email}`")
+        st.markdown(f"**Operator:** `{user['email']}`")
+        st.markdown(f"**Name:** `{user['name']}`")
         badge_class = "badge-pro" if tier in ["pro", "institutional"] else "badge-free"
         st.markdown(f"Tier: <span class='{badge_class}'>{tier.upper()}</span>", unsafe_allow_html=True)
         st.markdown("---")
@@ -143,9 +114,7 @@ def render_terminal():
         
         st.markdown("---")
         if st.button("Sign Out", use_container_width=True):
-            supabase.auth.sign_out()
-            st.session_state.user = None
-            st.session_state.profile = None
+            st.session_state.logged_user = None
             st.rerun()
 
     st.subheader(f"⚡ Financial Intelligence Console: {ticker}")
@@ -202,14 +171,14 @@ You are MarketCatalyst AI, an elite Equity Research Analyst and Financial Intell
 
 Key Analytical Framework:
 1. Catalyst Breakdown: Identify the core event (e.g., quarterly earnings release, executive guidance, interest rate decision, regulatory flash, or dividend announcement).
-2. Historical Context & Price Action: Compare the current event against historical precedent (past beats/misses, reaction to rate shifts).
+2. Historical Context & Price Action: Compare current price reactions against historical event precedents.
 3. Macro & Sector Drivers:
-   - For US stocks: Evaluate S&P 500/NASDAQ trends, Treasury yields, and Fed policy.
-   - For Norwegian stocks: Evaluate OSEBX dynamics, Norges Bank policy rates, Brent crude pricing, and USD/NOK exchange rates.
-4. Fundamental & Dividend Health: Review revenue/EPS trajectories, liquidity, free cash flow conversion, and dividend sustainability.
+   - For US stocks: Fed rate path, Treasury yields, US CPI/PCE data, sector rotation.
+   - For Norwegian stocks: Norges Bank policy rates, Brent crude pricing, USD/NOK and EUR/NOK currency dynamics, European power markets.
+4. Fundamental & Dividend Health: Review revenue/EPS trends, balance sheet strength, dividend sustainability, and payout coverage.
 5. Scenario Synthesis: Formulate clear Bull/Bear pathways, risk factors, and upcoming catalyst dates.
 
-Format with bold headers, concise bullet points, and scannable data. Maintain institutional rigor and objectivity. Provide market intelligence and educational analysis without personalized investment advice.
+Format with bold headers, concise bullet points, and scannable financial tables. Maintain institutional rigor and objectivity. Provide market intelligence without personalized investment advice.
 """
 
                 prompt = f"""
@@ -219,7 +188,7 @@ Analyze the following security and event context according to the 5-step Analyti
 - Market Universe: {market_universe}
 - Current Reference Price: {current_price:.2f} {currency}
 - Trailing P/E: {info.get('trailingPE', 'N/A')}
-- Context Trigger: {analysis_prompt}
+- User Context / Target Trigger: {analysis_prompt}
 """
 
                 response = client.models.generate_content(
@@ -240,7 +209,7 @@ Analyze the following security and event context according to the 5-step Analyti
 # ---------------------------------------------------------
 # 5. EXECUTION ROUTER
 # ---------------------------------------------------------
-if st.session_state.user is None:
+if st.session_state.logged_user is None:
     auth_screen()
 else:
     render_terminal()
