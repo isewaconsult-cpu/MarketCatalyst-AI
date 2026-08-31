@@ -67,15 +67,11 @@ with col_title:
 
 
 def build_needle_gauge(score, label_text):
-  """Builds a semi-circular speedometer with a true physical needle pointer."""
-  # Clamp score between 1.0 (Strong Sell) and 5.0 (Strong Buy)
+  """Builds a semi-circular speedometer with an authentic physical needle pointer."""
   score = max(1.0, min(5.0, float(score)))
-
-  # Angle calculation: 1.0 -> 180 deg (pi rad), 5.0 -> 0 deg (0 rad)
   theta_deg = 180.0 - ((score - 1.0) / 4.0) * 180.0
   theta_rad = math.radians(theta_deg)
 
-  # Needle coordinates from center (0.5, 0.15)
   cx, cy = 0.5, 0.15
   r = 0.35
   nx = cx + r * math.cos(theta_rad)
@@ -83,7 +79,6 @@ def build_needle_gauge(score, label_text):
 
   fig = go.Figure()
 
-  # Background Gauge Arc
   fig.add_trace(
       go.Indicator(
           mode="gauge",
@@ -103,7 +98,7 @@ def build_needle_gauge(score, label_text):
                   "tickcolor": "#94A3B8",
                   "tickfont": {"size": 10, "color": "#94A3B8"},
               },
-              "bar": {"color": "rgba(0,0,0,0)"},  # Invisible bar
+              "bar": {"color": "rgba(0,0,0,0)"},
               "bgcolor": "#161B22",
               "borderwidth": 0,
               "steps": [
@@ -116,7 +111,6 @@ def build_needle_gauge(score, label_text):
       )
   )
 
-  # Draw Center Pivot & Needle Pointer
   fig.add_shape(
       type="line",
       x0=cx,
@@ -139,7 +133,6 @@ def build_needle_gauge(score, label_text):
       yref="paper",
   )
 
-  # Text Annotation
   fig.add_annotation(
       x=0.5,
       y=0.02,
@@ -158,7 +151,7 @@ def build_needle_gauge(score, label_text):
   return fig
 
 
-# Input Form
+# Input Form Container
 with st.form(key="terminal_search_form", clear_on_submit=False):
   col1, col2 = st.columns([4, 1])
   with col1:
@@ -179,7 +172,6 @@ with st.form(key="terminal_search_form", clear_on_submit=False):
     )
 
 if ticker_input:
-  # Initialize Session State
   if "current_ticker" not in st.session_state:
     st.session_state.current_ticker = ""
   if (
@@ -190,7 +182,7 @@ if ticker_input:
     st.session_state.current_ticker = ticker_input
     st.session_state.report_generated = False
 
-  # 1. Fetch Fundamental & Consensus Data
+  # 1. Fetch Market & Fundamental Telemetry
   stock = yf.Ticker(ticker_input)
   info = stock.info or {}
   hist_1y = stock.history(period="1y")
@@ -275,7 +267,6 @@ if ticker_input:
         unsafe_allow_html=True,
     )
 
-    # Timeframe Selector
     tf_col1, tf_col2 = st.columns([3, 1])
     with tf_col1:
       timeframe = st.radio(
@@ -285,7 +276,6 @@ if ticker_input:
           horizontal=True,
       )
 
-    # Interval Mapping Rules for yfinance
     tf_mapping = {
         "1m": {"period": "5d", "interval": "1m"},
         "5m": {"period": "1mo", "interval": "5m"},
@@ -304,7 +294,6 @@ if ticker_input:
     if chart_data.empty:
       chart_data = hist_1y
 
-    # Render Multi-Timeframe Candlestick
     chart_fig = make_subplots(
         rows=2,
         cols=1,
@@ -373,12 +362,10 @@ if ticker_input:
     m_col1, m_col2 = st.columns([1, 1.4])
 
     with m_col1:
-      # True Needle Gauge
       st.plotly_chart(
           build_needle_gauge(dial_score, rec_label), use_container_width=True
       )
 
-      # Analyst Distribution Breakdown
       p_sb = 62 if "BUY" in rec_label else 20
       p_b = 18 if "BUY" in rec_label else 25
       p_h = 15 if "HOLD" in rec_label else 35
@@ -438,7 +425,6 @@ if ticker_input:
       st.markdown(dist_html, unsafe_allow_html=True)
 
     with m_col2:
-      # Target Price Cone
       last_date = hist_1y.index[-1]
       proj_dates = [
           last_date,
@@ -572,13 +558,25 @@ if ticker_input:
                 (Central bank rate decisions and macroeconomic filings)
                 """
 
+        # Automated Multi-Model Fallback Pipeline
         client = genai.Client(api_key=GEMINI_API_KEY)
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=[system_prompt, market_context],
-        )
+        candidate_models = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+        ]
+        response = None
+        for mod in candidate_models:
+          try:
+            response = client.models.generate_content(
+                model=mod, contents=[system_prompt, market_context]
+            )
+            if response and response.text:
+              break
+          except Exception:
+            continue
 
-        res_text = response.text
+        res_text = response.text if response else ""
 
         def extract_tag(text, tag, fallback=""):
           try:
@@ -870,6 +868,5 @@ if ticker_input:
 </html>"""
         st.session_state.report_generated = True
 
-    # Render Report Component
     if "report_html" in st.session_state:
       components.html(st.session_state.report_html, height=1400, scrolling=True)
