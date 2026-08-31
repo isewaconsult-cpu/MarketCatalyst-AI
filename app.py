@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+from urllib.parse import urlparse
 from supabase import create_client, Client
 from google import genai
 from google.genai import types
@@ -27,26 +28,36 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. CLIENT INITIALIZATION & CREDENTIAL SANITIZATION
+# 2. CLIENT INITIALIZATION & ROBUST URL SANITIZATION
 # ---------------------------------------------------------
 @st.cache_resource
 def init_supabase() -> Client:
-    raw_url = str(st.secrets["supabase"]["url"]).strip().strip('"\'').rstrip("/")
+    raw_url = str(st.secrets["supabase"]["url"]).strip().strip('"\'')
     raw_key = str(st.secrets["supabase"]["key"]).strip().strip('"\'')
+    
+    # Strip any stray markdown artifacts or trailing paths
+    if "]" in raw_url or ")" in raw_url:
+        raw_url = raw_url.split("]")[0].replace("[", "").replace("(", "")
     
     if not raw_url.startswith("http://") and not raw_url.startswith("https://"):
         raw_url = f"https://{raw_url}"
-        
-    return create_client(raw_url, raw_key)
+    
+    parsed = urlparse(raw_url)
+    clean_url = f"{parsed.scheme}://{parsed.netloc}"
+    
+    return create_client(clean_url, raw_key)
 
-supabase = init_supabase()
+try:
+    supabase = init_supabase()
+except Exception as e:
+    st.error(f"Supabase Initialization Error: {str(e)}")
 
 def get_gemini_client():
     api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
     return genai.Client(api_key=api_key)
 
 # ---------------------------------------------------------
-# 3. AUTHENTICATION HANDLERS & PROFILE SYNC
+# 3. AUTHENTICATION HANDLERS
 # ---------------------------------------------------------
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -99,12 +110,12 @@ def auth_screen():
                             "password": su_password,
                             "options": {"data": {"full_name": su_name.strip()}}
                         })
-                        st.success("Account created successfully. You can now switch to the 'Sign In' tab.")
+                        st.success("Account created successfully. Please switch to the 'Sign In' tab.")
                     except Exception as e:
                         st.error(f"Account creation failed: {str(e)}")
 
 # ---------------------------------------------------------
-# 4. CORE TERMINAL INTERFACE & RESEARCH WORKFLOW
+# 4. CORE TERMINAL INTERFACE
 # ---------------------------------------------------------
 def render_terminal():
     user = st.session_state.user
@@ -140,10 +151,9 @@ def render_terminal():
         info = stock.info
         
         if hist.empty:
-            st.warning(f"No market data found for `{ticker}`. Verify ticker suffix (e.g., `.OL` for Oslo Børs).")
+            st.warning(f"No market data found for symbol `{ticker}`. Check ticker suffix (e.g. `.OL` for Oslo Børs).")
             return
 
-        # Core Metrics Display
         c1, c2, c3, c4 = st.columns(4)
         currency = info.get("currency", "USD")
         current_price = hist['Close'].iloc[-1]
@@ -156,7 +166,6 @@ def render_terminal():
         div_yield = info.get('dividendYield')
         c4.metric(label="Dividend Yield", value=f"{div_yield*100:.2f}%" if div_yield else "N/A")
 
-        # Interactive Candlestick Chart
         fig = go.Figure(data=[go.Candlestick(
             x=hist.index,
             open=hist['Open'],
@@ -173,7 +182,6 @@ def render_terminal():
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # Catalyst & Scenario Analysis Interface
         st.markdown("### 📋 Institutional Catalyst Breakdown & Macro Synthesis")
         analysis_prompt = st.text_area(
             "Event Trigger / Analysis Context", 
@@ -187,37 +195,26 @@ def render_terminal():
                 system_instruction = """
 You are MarketCatalyst AI, an elite Equity Research Analyst and Financial Intelligence Specialist. Your domain expertise covers both US financial markets (S&P 500, NASDAQ, NYSE) and Norwegian markets (Oslo Børs / OSEBX). You specialize in event-driven financial analysis, correlating historical price behavior with news releases, leadership statements, corporate filings, and macroeconomic developments.
 
-Core Objectives:
-1. Analyze how historical price actions correlate with specific news triggers, earnings releases, and executive statements.
-2. Evaluate macroeconomic drivers, specifically monetary policy from the US Federal Reserve and Norges Bank, interest rate shifts, inflation data, and commodity impacts (especially oil/energy on the Oslo Børs).
-3. Digest corporate reports (10-K, 10-Q, 8-K, Norwegian quarterly/annual reports), dividend changes, and earnings call transcripts to assess fundamental health.
-4. Synthesize multi-source data to provide objective, institutional-grade market assessments.
-
 Key Analytical Framework:
-1. Catalyst Breakdown: Identify the core event (e.g., quarterly earnings release, executive guidance, interest rate decision, regulatory flash, or dividend announcement).
-2. Historical Context & Price Action: Compare the current event against historical precedent (e.g., past earnings beats/misses, price reactions to rate hikes/cuts, or prior CEO guidance revisions).
+1. Catalyst Breakdown: Identify the core event (earnings, guidance revisions, monetary policy, M&A, regulatory changes).
+2. Historical Context & Price Action: Compare current price reactions against historical event precedents.
 3. Macro & Sector Drivers:
-   - For US stocks: Evaluate S&P 500/NASDAQ trends, Wall Street sentiment, US Treasury yields, and Fed policy.
-   - For Norwegian stocks: Evaluate OSEBX dynamics, Norges Bank policy rates, Brent crude prices, foreign exchange impacts (USD/NOK, EUR/NOK), and European market conditions.
-4. Fundamental & Dividend Health: Review revenue/EPS trends, balance sheet strength, dividend sustainability (payout ratios, ex-dividend dates), and capital allocation plans.
-5. Scenario Synthesis: Present balanced bull and bear perspectives, upcoming risk factors, key watchpoints, and relevant date triggers.
+   - For US stocks: Fed rate path, Treasury yield curve, US CPI/PCE data, sector rotation.
+   - For Norwegian stocks: Norges Bank policy rates, Brent crude pricing, USD/NOK and EUR/NOK currency dynamics, European power markets.
+4. Fundamental & Dividend Health: P/E multiples, balance sheet liquidity, free cash flow conversion, dividend sustainability and coverage ratios.
+5. Scenario Synthesis: Construct actionable Bull and Bear price pathways, risk thresholds, and upcoming catalyst dates.
 
-Communication Guidelines & Formatting:
-- Clarity & Scannability: Minimize introductory fluff. Jump directly into the analysis using structured bullet points, clear bold sub-headers, and comparison tables where applicable.
-- Currency & Market Precision: Keep currencies consistent and explicit (USD vs. NOK). Clearly distinguish between US market conventions (SEC filings, Fed speak) and Norwegian/Nordic conventions (Euronext Oslo, Norges Bank).
-- Data Integrity: Never guess or hallucinate financial metrics, stock quotes, or historical dates. If specific data is unverified or outside the prompt context, state the limitation clearly.
-- Professional Tone: Maintain an objective, institutional, and analytically grounded tone. Avoid sensationalist language in favor of data-driven descriptors.
-- Financial Compliance: Provide market intelligence and educational analysis; never deliver direct, personalized investment advice.
+Format with bold headers, concise bullet points, and scannable financial tables. Maintain institutional rigor and objectivity.
 """
 
                 prompt = f"""
-Analyze the following security and event context according to the 5-step Analytical Framework:
+Analyze the following security and event context:
 - Security: {ticker} ({info.get('longName', ticker)})
 - Sector / Industry: {info.get('sector', 'N/A')} / {info.get('industry', 'N/A')}
 - Market Universe: {market_universe}
 - Current Reference Price: {current_price:.2f} {currency}
-- Historical Trailing P/E: {info.get('trailingPE', 'N/A')}
-- User Context / Target Trigger: {analysis_prompt}
+- Trailing P/E: {info.get('trailingPE', 'N/A')}
+- User Context: {analysis_prompt}
 """
 
                 response = client.models.generate_content(
