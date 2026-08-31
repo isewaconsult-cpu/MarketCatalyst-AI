@@ -1,3 +1,5 @@
 streamlit
 yfinance
 google-genai
+plotly
+fpdf2
