@@ -9,56 +9,172 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 # ---------------------------------------------------------
-# 1. PAGE CONFIGURATION & INSTITUTIONAL THEME STYLING
+# 1. PAGE CONFIGURATION & SIMPLY WALL ST DARK THEME
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="MarketCatalyst AI | Global Equity Research Terminal",
+    page_title="MarketCatalyst AI | Dashboard",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 st.markdown("""
 <style>
+    /* Dark Theme Core */
     .stApp {
-        background-color: #0b0f19;
-        color: #f3f4f6;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background-color: #0d1117;
+        color: #c9d1d9;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     }
     
-    /* Real-Time Market Ribbon */
+    /* Global Ribbon */
     .ticker-ribbon {
         display: flex;
         align-items: center;
         gap: 20px;
         overflow-x: auto;
-        background-color: #111827;
-        padding: 10px 18px;
+        background-color: #161b22;
+        padding: 8px 16px;
         border-radius: 6px;
         border-top: 2px solid #0284c7;
-        border-bottom: 1px solid #1f2937;
-        margin-bottom: 20px;
+        border-bottom: 1px solid #30363d;
+        margin-bottom: 15px;
         white-space: nowrap;
     }
     .ticker-item {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        font-size: 13px;
-        padding-right: 18px;
-        border-right: 1px solid #1f2937;
+        font-size: 12px;
+        padding-right: 15px;
+        border-right: 1px solid #30363d;
     }
-    .ticker-name { font-weight: 700; color: #ffffff; }
-    .ticker-val { color: #9ca3af; font-family: monospace; }
-    .ticker-up { color: #10b981; font-weight: 600; }
-    .ticker-down { color: #ef4444; font-weight: 600; }
+    .ticker-name { font-weight: 700; color: #f0f6fc; }
+    .ticker-val { color: #8b949e; font-family: monospace; }
+    .ticker-up { color: #3fb950; font-weight: 600; }
+    .ticker-down { color: #f85149; font-weight: 600; }
 
-    /* Metric Cards */
-    .stMetric {
-        background-color: #131b2e !important;
-        border: 1px solid #1e293b !important;
-        padding: 14px !important;
-        border-radius: 8px !important;
+    /* Top Navigation Header */
+    .sws-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background-color: #161b22;
+        padding: 10px 20px;
+        border-radius: 8px;
+        border: 1px solid #30363d;
+        margin-bottom: 20px;
+    }
+    .sws-brand {
+        font-size: 18px;
+        font-weight: 800;
+        color: #f0f6fc;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        letter-spacing: -0.5px;
+    }
+    .sws-nav-links {
+        display: flex;
+        gap: 18px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .sws-nav-links a {
+        color: #8b949e;
+        text-decoration: none;
+    }
+    .sws-nav-links a.active {
+        color: #58a6ff;
+        border-bottom: 2px solid #58a6ff;
+        padding-bottom: 4px;
+    }
+
+    /* Portfolio Cards */
+    .portfolio-card {
+        background: linear-gradient(135deg, #1c2128 0%, #161b22 100%);
+        border: 1px solid #30363d;
+        border-radius: 10px;
+        padding: 18px;
+        height: 100%;
+    }
+    .new-portfolio-card {
+        background-color: #161b22;
+        border: 1px dashed #30363d;
+        border-radius: 10px;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #8b949e;
+        cursor: pointer;
+    }
+    .new-portfolio-card:hover {
+        border-color: #58a6ff;
+        color: #58a6ff;
+    }
+
+    /* Smart Updates Feed Card */
+    .update-card {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        transition: border-color 0.2s;
+    }
+    .update-card:hover {
+        border-color: #58a6ff;
+    }
+    .update-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 8px;
+    }
+    .company-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: #f0f6fc;
+    }
+    .price-pill {
+        font-size: 12px;
+        font-weight: 600;
+        font-family: monospace;
+    }
+    .update-body-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #f0f6fc;
+        margin: 6px 0;
+    }
+    .update-body-text {
+        font-size: 13px;
+        color: #8b949e;
+        line-height: 1.4;
+    }
+
+    /* Right Column / Community Cards */
+    .community-card {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+    }
+    .badge-amber {
+        color: #d29922;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .author-meta {
+        font-size: 12px;
+        font-weight: 600;
+        color: #c9d1d9;
     }
 
     /* Institutional Footer */
@@ -107,17 +223,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. SESSION STATE MANAGEMENT
+# 2. SESSION STATE
 # ---------------------------------------------------------
 if "portfolio" not in st.session_state:
     st.session_state.portfolio = [
-        {"Ticker": "NVDA", "Shares": 15, "Buy Price": 180.00, "Currency": "USD"},
-        {"Ticker": "EQNR.OL", "Shares": 120, "Buy Price": 290.00, "Currency": "NOK"},
-        {"Ticker": "AAPL", "Shares": 25, "Buy Price": 195.00, "Currency": "USD"}
+        {"Ticker": "NVDA", "Company": "NVIDIA Corp", "Shares": 25, "Value": 5438.75, "Gain": "+184.2%"},
+        {"Ticker": "EQNR.OL", "Company": "Equinor ASA", "Shares": 150, "Value": 43500.00, "Gain": "+12.8%"},
+        {"Ticker": "META", "Company": "Meta Platforms", "Shares": 12, "Value": 6936.24, "Gain": "+64.5%"},
+        {"Ticker": "CRWD", "Company": "CrowdStrike", "Shares": 18, "Value": 3931.20, "Gain": "+21.4%"}
     ]
 
-if "watchlist" not in st.session_state:
-    st.session_state.watchlist = ["NVDA", "EQNR.OL", "MSFT", "DNB.OL", "ASML", "VOLV-B.ST", "NOVO-B.CO"]
+if "active_ticker" not in st.session_state:
+    st.session_state.active_ticker = "NVDA"
 
 def get_gemini_client():
     api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
@@ -137,8 +254,8 @@ def fetch_global_ribbon_data():
         "OMXS30": "^OMX",
         "OMXC25": "^OMXC25",
         "OMXH25": "^OMXH25",
-        "FTSE 100": "^FTSE",
-        "DAX": "^GDAXI"
+        "DAX": "^GDAXI",
+        "FTSE 100": "^FTSE"
     }
     ticker_data = []
     for label, sym in indices.items():
@@ -213,22 +330,21 @@ def generate_snowflake_chart(info, hist):
         line=dict(color='#84cc16', width=2),
         name='Factor Snowflake'
     ))
-    
     fig.update_layout(
         polar=dict(
-            radialaxis=dict(visible=True, range=[0, 6], showticklabels=False, linecolor="#374151", gridcolor="#1f2937"),
-            angularaxis=dict(linecolor="#374151", gridcolor="#1f2937", tickfont=dict(color="#f3f4f6", size=11))
+            radialaxis=dict(visible=True, range=[0, 6], showticklabels=False, linecolor="#30363d", gridcolor="#21262d"),
+            angularaxis=dict(linecolor="#30363d", gridcolor="#21262d", tickfont=dict(color="#f0f6fc", size=11))
         ),
         showlegend=False,
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=30, r=30, t=20, b=20),
-        height=320
+        margin=dict(l=20, r=20, t=15, b=15),
+        height=280
     )
     return fig
 
 # ---------------------------------------------------------
-# 5. GLOBAL REGISTRY & MARKET DEFINITIONS
+# 5. GLOBAL MARKETS DICTIONARY WITH FLAGS
 # ---------------------------------------------------------
 MARKETS = {
     "🇺🇸 United States (S&P 500 / NASDAQ / NYSE)": {"default": "NVDA", "currency": "USD"},
@@ -246,129 +362,296 @@ MARKETS = {
 }
 
 # ---------------------------------------------------------
-# 6. TOP NAVIGATION & HEADER
+# 6. HEADER & SEARCH BAR
 # ---------------------------------------------------------
 render_market_ribbon()
 
-h_col1, h_col2, h_col3 = st.columns([1.5, 2.5, 1.8])
-with h_col1:
-    st.markdown("### ⚡ MarketCatalyst AI")
-    st.caption("Institutional Financial Intelligence & Snowflake Analytics")
+head_c1, head_c2, head_c3 = st.columns([1.8, 2.2, 1.2])
+with head_c1:
+    st.markdown('<div class="sws-brand">⚡ MarketCatalyst AI</div>', unsafe_allow_html=True)
+    st.caption("Institutional Intelligence & Snowflake Analytics")
 
-with h_col2:
-    search_query = st.text_input(
-        "Search Equities",
-        placeholder="Type Ticker (e.g. NVDA, EQNR.OL, ASML, NOVO-B.CO)...",
+with head_c2:
+    search_input = st.text_input(
+        "Search Global Equities",
+        placeholder="🔍 Search 150k+ stocks (e.g., NVDA, EQNR.OL, META, OKTA)...",
         label_visibility="collapsed"
     )
+    if search_input.strip():
+        st.session_state.active_ticker = search_input.upper().strip()
 
-with h_col3:
+with head_c3:
     b1, b2 = st.columns(2)
     with b1:
         if st.button("Create free account", type="primary", use_container_width=True):
-            st.info("Registration portal active in fast preview mode.")
+            st.info("Registration portal active.")
     with b2:
         if st.button("Log in", use_container_width=True):
-            st.success("Authenticated as Preetam Pandey (Institutional Tier)")
+            st.success("Authenticated as Preetam Pandey")
 
 # ---------------------------------------------------------
-# 7. SIDEBAR CONTROLS
+# 7. MAIN TABS NAVIGATION (SIMPLY WALL ST STRUCTURE)
 # ---------------------------------------------------------
-with st.sidebar:
-    st.markdown("### 🌐 Global Market Universe")
-    selected_market = st.selectbox("Select Primary Market", list(MARKETS.keys()), index=0)
-    market_cfg = MARKETS[selected_market]
-    
-    if search_query.strip():
-        active_ticker = search_query.upper().strip()
-    else:
-        active_ticker = st.text_input("Active Ticker Symbol", value=market_cfg["default"]).upper().strip()
-        
-    timeframe = st.selectbox("Historical Benchmark Window", ["1mo", "3mo", "6mo", "1y", "2y", "5y"], index=3)
-    
-    st.markdown("---")
-    st.markdown("### 📌 Quick Watchlist")
-    for item in st.session_state.watchlist[:5]:
-        if st.button(f"⚡ {item}", key=f"side_wl_{item}", use_container_width=True):
-            active_ticker = item
-
-# ---------------------------------------------------------
-# 8. PRIMARY WORKSPACE TABS
-# ---------------------------------------------------------
-tab_analysis, tab_portfolio, tab_watchlist, tab_news = st.tabs([
-    "📊 Research Terminal & Snowflake", 
-    "💼 Portfolio Command Center", 
-    "⭐ Watchlist & Screeners", 
-    "⚡ Event Triggers & Newsflash"
+main_tab1, main_tab2, main_tab3, main_tab4 = st.tabs([
+    "🏠 Dashboard & Feed", 
+    "📊 Institutional Research & Snowflake", 
+    "💼 Portfolios Command Center", 
+    "⭐ Screener & Watchlist"
 ])
 
-# TAB 1: COMPANY TELEMETRY & CATALYST INTELLIGENCE
-with tab_analysis:
+# ---------------------------------------------------------
+# TAB 1: EXACT SIMPLY WALL ST DASHBOARD LAYOUT
+# ---------------------------------------------------------
+with main_tab1:
+    col_left, col_right = st.columns([1.85, 1.15])
+
+    # === LEFT COLUMN: PORTFOLIO CARDS & SMART UPDATES FEED ===
+    with col_left:
+        # Row of Portfolio Cards
+        pc1, pc2 = st.columns(2)
+        with pc1:
+            st.markdown("""
+            <div class="portfolio-card">
+                <div style="font-size: 12px; color: #8b949e; display: flex; gap: 8px; align-items: center;">
+                    <span style="background: #e11d48; color: white; padding: 2px 5px; border-radius: 3px; font-weight: bold; font-size: 10px;">J&J</span>
+                    <span style="background: #2563eb; color: white; padding: 2px 5px; border-radius: 3px; font-weight: bold; font-size: 10px;">EQNR</span>
+                    <span style="color: #8b949e;">+12</span>
+                </div>
+                <div style="font-size: 13px; font-weight: 700; color: #f0f6fc; margin-top: 6px;">💼 Main Institutional Portfolio</div>
+                <div style="font-size: 22px; font-weight: 800; color: #f0f6fc; margin: 4px 0;">
+                    US$362,386 <span style="font-size: 12px; color: #3fb950; font-weight: 600;">↗ 123.8%</span>
+                </div>
+                <div style="display: flex; gap: 14px; font-size: 11px; color: #8b949e; margin-top: 4px;">
+                    <span>1D: <b style="color: #f85149;">-US$4,521 (-1.2%)</b></span>
+                    <span>3M: <b style="color: #f85149;">-US$9,723 (-2.6%)</b></span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with pc2:
+            st.markdown("""
+            <div class="new-portfolio-card">
+                <div style="font-size: 24px; font-weight: 300; margin-bottom: 4px;">+</div>
+                <div style="font-size: 13px; font-weight: 600;">New Portfolio</div>
+                <div style="font-size: 11px; color: #8b949e;">Track institutional benchmarks</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Smart Updates Header & Quick Actions
+        su_col1, su_col2 = st.columns([1.5, 1])
+        with su_col1:
+            st.markdown("#### ⚡ 5 Smart Updates Today from **Demo Portfolio**")
+        with su_col2:
+            ua1, ua2 = st.columns(2)
+            with ua1:
+                st.button("Add to Watchlist", use_container_width=True)
+            with ua2:
+                st.button("Add to Portfolio", use_container_width=True)
+
+        # SMART UPDATE CARD 1: META
+        st.markdown("""
+        <div class="update-card">
+            <div class="update-header">
+                <div>
+                    <span class="company-title">📘 Meta Platforms</span>
+                    <span style="font-size: 11px; color: #8b949e;"> • Narrative update by <b>andre_santos</b> • 2h</span>
+                </div>
+                <div class="price-pill" style="color: #3fb950;">META US$578.02 ↗ 1.2%</div>
+            </div>
+            <div class="update-body-title">Q2 - Update</div>
+            <div class="update-body-text">
+                Updated with the most recent Q2 earnings report. Operating margin expanded 320 bps driven by Family of Apps ad impressions, with AI infrastructure investments slated at $38-40B Capex.
+            </div>
+            <div style="margin-top: 8px; font-size: 12px; color: #58a6ff; cursor: pointer;">Show institutional breakdown →</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # SMART UPDATE CARD 2: NVIDIA
+        st.markdown("""
+        <div class="update-card">
+            <div class="update-header">
+                <div>
+                    <span class="company-title">💚 NVIDIA Corporation</span>
+                    <span style="font-size: 11px; color: #8b949e;"> • Live News • 2h</span>
+                </div>
+                <div class="price-pill" style="color: #f85149;">NVDA US$217.55 ↘ -4.6%</div>
+            </div>
+            <div class="update-body-title">NVIDIA Invests $3.5 Billion With MediaTek for Next-Generation AI Platforms and Automotive Solutions</div>
+            <div class="update-body-text">
+                NVIDIA is expanding its automotive and custom SoC partnership through a US$3.5B multi-year investment spanning Drive Thor platforms and edge-AI client processors.
+            </div>
+            <div style="margin-top: 8px; font-size: 12px; color: #58a6ff; cursor: pointer;">Show institutional breakdown →</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # SMART UPDATE CARD 3: CROWDSTRIKE
+        st.markdown("""
+        <div class="update-card">
+            <div class="update-header">
+                <div>
+                    <span class="company-title">🛡️ CrowdStrike Holdings</span>
+                    <span style="font-size: 11px; color: #8b949e;"> • Seeking Alpha • 4h</span>
+                </div>
+                <div class="price-pill" style="color: #f85149;">CRWD US$218.40 ↘ -4.2%</div>
+            </div>
+            <div class="update-body-title">AI Multiplier: Why CrowdStrike's ARR Explosion Proves Resilience (Rating Upgrade)</div>
+            <div class="update-body-text">
+                Summary: CrowdStrike leverages Falcon Flex architecture to drive contract expansion. Net new ARR reached record trajectory with 26% YoY recurring revenue durability.
+            </div>
+            <div style="margin-top: 8px; font-size: 12px; color: #58a6ff; cursor: pointer;">Show institutional breakdown →</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # SMART UPDATE CARD 4: OKTA
+        st.markdown("""
+        <div class="update-card">
+            <div class="update-header">
+                <div>
+                    <span class="company-title">🔐 Okta, Inc.</span>
+                    <span style="font-size: 11px; color: #8b949e;"> • Event Trigger • 4h</span>
+                </div>
+                <div class="price-pill" style="color: #f85149;">OKTA US$166.23 ↘ -3.9%</div>
+            </div>
+            <div class="update-body-title">Okta: AI Identity Breakout vs. Enterprise IT Scrutiny</div>
+            <div class="update-body-text">
+                Delivered 11% revenue growth, raised full-year operating cash flow projections, and introduced automated governance modules across cloud directories.
+            </div>
+            <div style="margin-top: 8px; font-size: 12px; color: #58a6ff; cursor: pointer;">Show institutional breakdown →</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # === RIGHT COLUMN: COMMUNITY INSIGHTS, THE FOXHOLE & TOP PICKS ===
+    with col_right:
+        # Community Post 1: The Foxhole
+        st.markdown("""
+        <div class="community-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span class="author-meta">👤 mitchell_lawler</span>
+                <span class="badge-amber">🦊 THE FOXHOLE</span>
+            </div>
+            <div style="font-size: 14px; font-weight: 700; color: #f0f6fc; line-height: 1.3; margin-bottom: 8px;">
+                The world's in stitches over humanoid robotics. I still think they're the only mathematical answer to OECD demographic contraction.
+            </div>
+            <div style="background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #30363d; font-size: 11px; color: #8b949e; margin-bottom: 10px;">
+                📊 <b>OECD Manufacturing Productivity Index vs Labor Deficit (2024-2030E)</b><br>
+                Demographic replacement rates fall below 1.4 in Nordic and East Asian manufacturing corridors.
+            </div>
+            <div style="font-size: 12px; color: #8b949e; display: flex; justify-content: space-between;">
+                <span>👍 8 reactions • 💬 7 comments</span>
+                <span>11h ago</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Community Post 2: Market Insights
+        st.markdown("""
+        <div class="community-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span class="author-meta">👤 Andrew Legget</span>
+                <span class="badge-amber">📈 MARKET INSIGHTS</span>
+            </div>
+            <div style="font-size: 14px; font-weight: 700; color: #f0f6fc; line-height: 1.3; margin-bottom: 8px;">
+                Great earnings season, but are corporate cash conversions keeping pace?
+            </div>
+            <div style="font-size: 12px; color: #8b949e; line-height: 1.4; margin-bottom: 10px;">
+                At first glance, S&P 500 blended EPS growth topped 11.2%. But when evaluating FCF yield ex-Capex among mega-cap tech, working capital divergence is reaching cycle highs.
+            </div>
+            <div style="font-size: 12px; color: #8b949e; display: flex; justify-content: space-between;">
+                <span>👍 7 reactions • 💬 5 comments</span>
+                <span>4d ago</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Community Post 3: Community Top Picks
+        st.markdown("""
+        <div class="community-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span class="author-meta">👤 Karthik_Selva</span>
+                <span class="badge-amber">⭐ COMMUNITY TOP PICKS</span>
+            </div>
+            <div style="font-size: 14px; font-weight: 700; color: #f0f6fc; margin-bottom: 8px;">
+                After The Earnings: Key Rebalancing Triggers
+            </div>
+            <div style="font-size: 12px; color: #8b949e; line-height: 1.5;">
+                • <b>Meta Platforms:</b> Ad monetization durability outpaces TikTok share loss.<br>
+                • <b>Equinor (EQNR):</b> Strong European gas realization offsetting Brent range-trading.<br>
+                • <b>ASML:</b> High-NA EUV backlog validation confirms 2026 semi recovery.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ---------------------------------------------------------
+# TAB 2: INSTITUTIONAL RESEARCH & SNOWFLAKE RADAR
+# ---------------------------------------------------------
+with main_tab2:
+    # Market Selector & Universe
+    u_c1, u_c2, u_c3 = st.columns([1.5, 1, 1])
+    with u_c1:
+        sel_market = st.selectbox("Market Exchange", list(MARKETS.keys()), index=0)
+    with u_c2:
+        target_ticker = st.text_input("Active Ticker Symbol", value=st.session_state.active_ticker).upper().strip()
+    with u_c3:
+        bench_period = st.selectbox("Benchmark Window", ["1mo", "3mo", "6mo", "1y", "2y", "5y"], index=3)
+
     try:
-        stock = yf.Ticker(active_ticker)
-        hist = stock.history(period=timeframe)
+        stock = yf.Ticker(target_ticker)
+        hist = stock.history(period=bench_period)
         info = stock.info
         
         if hist.empty:
-            st.warning(f"No market data located for `{active_ticker}`. Ensure valid ticker suffix (e.g. `.OL` for Oslo, `.ST` for Stockholm).")
+            st.warning(f"No market data located for `{target_ticker}`. Check suffix (e.g., `.OL` for Oslo Børs).")
         else:
-            currency = info.get("currency", market_cfg["currency"])
-            current_price = hist['Close'].iloc[-1]
-            prev_close = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
-            pct_change = ((current_price - prev_close) / prev_close) * 100
-            
-            st.markdown(f"## {info.get('longName', active_ticker)} (`{active_ticker}`)")
-            st.caption(f"Sector: **{info.get('sector', 'N/A')}** | Industry: **{info.get('industry', 'N/A')}** | Market: **{selected_market}**")
-            
-            # Key Metric Cards
+            curr_price = hist['Close'].iloc[-1]
+            prev_price = hist['Close'].iloc[-2] if len(hist) > 1 else curr_price
+            delta_pct = ((curr_price - prev_price) / prev_price) * 100
+            curr_code = info.get("currency", "USD")
+
+            st.markdown(f"### {info.get('longName', target_ticker)} (`{target_ticker}`)")
+            st.caption(f"Sector: **{info.get('sector', 'N/A')}** | Industry: **{info.get('industry', 'N/A')}** | Exchange: **{sel_market}**")
+
+            # Metrics Row
             m1, m2, m3, m4, m5 = st.columns(5)
-            m1.metric("Last Price", f"{current_price:,.2f} {currency}", f"{pct_change:+.2f}%")
+            m1.metric("Last Price", f"{curr_price:,.2f} {curr_code}", f"{delta_pct:+.2f}%")
             m2.metric("Market Cap", f"{info.get('marketCap', 0):,}")
             m3.metric("Trailing P/E", f"{info.get('trailingPE', 'N/A')}")
             div_val = info.get('dividendYield')
             m4.metric("Dividend Yield", f"{div_val*100:.2f}%" if div_val else "0.00%")
             m5.metric("52W Range", f"{info.get('fiftyTwoWeekLow', 0):.2f} - {info.get('fiftyTwoWeekHigh', 0):.2f}")
-            
-            col_chart, col_snowflake = st.columns([1.8, 1.2])
-            
-            with col_chart:
-                st.markdown("##### 📈 Interactive Price Action & Technical Structure")
-                fig_price = go.Figure(data=[go.Candlestick(
-                    x=hist.index,
-                    open=hist['Open'],
-                    high=hist['High'],
-                    low=hist['Low'],
-                    close=hist['Close'],
-                    name=active_ticker
-                )])
-                fig_price.update_layout(
-                    template="plotly_dark",
-                    xaxis_rangeslider_visible=False,
-                    height=340,
-                    margin=dict(l=10, r=10, t=10, b=10)
-                )
-                st.plotly_chart(fig_price, use_container_width=True)
-                
-            with col_snowflake:
-                st.markdown("##### ❄️ Multi-Factor Snowflake Analysis")
-                fig_snow = generate_snowflake_chart(info, hist)
-                st.plotly_chart(fig_snow, use_container_width=True)
-                st.caption("Visualizing Valuation, Future Growth, Past Performance, Financial Health & Dividends.")
 
-            # Catalyst Research Synthesis
+            # Chart + Snowflake
+            c_left, c_right = st.columns([1.8, 1.2])
+            with c_left:
+                st.markdown("##### 📈 Price Action & Structure")
+                fig_c = go.Figure(data=[go.Candlestick(
+                    x=hist.index,
+                    open=hist['Open'], high=hist['High'],
+                    low=hist['Low'], close=hist['Close'],
+                    name=target_ticker
+                )])
+                fig_c.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=300, margin=dict(l=10, r=10, t=10, b=10))
+                st.plotly_chart(fig_c, use_container_width=True)
+
+            with c_right:
+                st.markdown("##### ❄️ Snowflake 5-Factor Radar")
+                fig_s = generate_snowflake_chart(info, hist)
+                st.plotly_chart(fig_s, use_container_width=True)
+
+            # Gemini 5-Step Synthesis
             st.markdown("---")
             st.markdown("### 📋 Institutional Catalyst Breakdown & Macro Synthesis")
-            
-            user_context = st.text_area(
-                "Event Trigger / Macro Catalyst Input", 
-                value=f"Evaluate recent earnings disclosures, central bank policy posture (Fed / Norges Bank / ECB), commodity/FX volatility, and balance sheet durability for {active_ticker}."
+            c_input = st.text_area(
+                "Catalyst Prompt / Context Trigger",
+                value=f"Evaluate recent quarterly earnings, Fed/Norges Bank policy rates, margin durability, and capital returns for {target_ticker}."
             )
-            
-            if st.button("Generate Catalyst Analysis", type="primary"):
-                with st.spinner("Executing institutional equity analysis..."):
+
+            if st.button("Generate Institutional Research", type="primary"):
+                with st.spinner("Executing 5-step institutional equity synthesis..."):
                     client = get_gemini_client()
                     
-                    system_prompt = """
+                    sys_prompt = """
 You are MarketCatalyst AI, an elite Equity Research Analyst and Financial Intelligence Specialist. Your domain expertise covers both US financial markets (S&P 500, NASDAQ, NYSE) and Norwegian/European markets (Oslo Børs / OSEBX, Euronext). You specialize in event-driven financial analysis, correlating historical price behavior with news releases, leadership statements, corporate filings, and macroeconomic developments.
 
 Execute analysis systematically using the 5-Step Key Analytical Framework:
@@ -381,109 +664,98 @@ Execute analysis systematically using the 5-Step Key Analytical Framework:
 Format with bold headers, concise bullet points, and scannable institutional tables. Maintain objective, data-driven rigor. Provide market intelligence and educational analysis without personalized investment advice.
 """
 
-                    prompt = f"""
+                    p_text = f"""
 Analyze the following security telemetry:
-- Symbol: {active_ticker} ({info.get('longName', active_ticker)})
+- Symbol: {target_ticker} ({info.get('longName', target_ticker)})
 - Sector / Industry: {info.get('sector', 'N/A')} / {info.get('industry', 'N/A')}
-- Market Context: {selected_market}
-- Reference Price: {current_price:.2f} {currency}
+- Market Context: {sel_market}
+- Reference Price: {curr_price:.2f} {curr_code}
 - Trailing P/E: {info.get('trailingPE', 'N/A')}
-- User Trigger: {user_context}
+- User Trigger: {c_input}
 """
-
-                    response = client.models.generate_content(
+                    res = client.models.generate_content(
                         model='gemini-2.5-flash',
-                        contents=prompt,
+                        contents=p_text,
                         config=types.GenerateContentConfig(
-                            system_instruction=system_prompt,
+                            system_instruction=sys_prompt,
                             temperature=0.2,
                         ),
                     )
                     st.markdown("---")
-                    st.markdown(response.text)
-                    
+                    st.markdown(res.text)
+
     except Exception as e:
-        st.error(f"Error compiling equity telemetry: {str(e)}")
-
-# TAB 2: PORTFOLIO COMMAND CENTER
-with tab_portfolio:
-    st.markdown("### 💼 Portfolio Command Center")
-    st.caption("Manage positions, track allocations, and inspect aggregate portfolio risk.")
-    
-    port_df = pd.DataFrame(st.session_state.portfolio)
-    p_col1, p_col2 = st.columns([2, 1])
-    
-    with p_col1:
-        st.dataframe(port_df, use_container_width=True)
-        with st.expander("➕ Add Position"):
-            with st.form("add_pos_form"):
-                new_ticker = st.text_input("Ticker Symbol").upper().strip()
-                new_shares = st.number_input("Shares", min_value=1.0, value=10.0)
-                new_price = st.number_input("Average Buy Price", min_value=0.1, value=100.0)
-                new_curr = st.selectbox("Currency", ["USD", "NOK", "EUR", "SEK", "GBP", "JPY"])
-                if st.form_submit_button("Add to Portfolio"):
-                    st.session_state.portfolio.append({
-                        "Ticker": new_ticker, "Shares": new_shares, "Buy Price": new_price, "Currency": new_curr
-                    })
-                    st.rerun()
-                    
-    with p_col2:
-        if not port_df.empty:
-            fig_pie = px.pie(port_df, values='Shares', names='Ticker', title="Asset Allocation", hole=0.4)
-            fig_pie.update_layout(template="plotly_dark", height=280, margin=dict(l=10, r=10, t=30, b=10))
-            st.plotly_chart(fig_pie, use_container_width=True)
-
-# TAB 3: WATCHLIST & SCREENERS
-with tab_watchlist:
-    st.markdown("### ⭐ Active Watchlist & Screeners")
-    wl_cols = st.columns(len(st.session_state.watchlist[:6]))
-    for idx, sym in enumerate(st.session_state.watchlist[:6]):
-        with wl_cols[idx]:
-            st.button(f"📊 {sym}", key=f"wl_btn_{sym}", use_container_width=True)
-    st.info("Screening engine active: Filter by P/E ratio, dividend yield, and debt-to-equity across US and Nordic markets.")
-
-# TAB 4: EVENT TRIGGERS & NEWSFLASH
-with tab_news:
-    st.markdown("### ⚡ Live Macroeconomic & Event Triggers")
-    events = [
-        {"Time": "14:30 EDT", "Event": "US Core PCE Price Index (YoY)", "Impact": "HIGH", "Market": "US"},
-        {"Time": "10:00 CEST", "Event": "Norges Bank Policy Rate Decision & Monetary Report", "Impact": "CRITICAL", "Market": "NO"},
-        {"Time": "16:00 EDT", "Event": "NVIDIA (NVDA) Earnings Call & Guidance", "Impact": "HIGH", "Market": "US"},
-        {"Time": "08:00 CEST", "Event": "Equinor (EQNR) Dividend Distribution Date", "Impact": "MED", "Market": "NO"}
-    ]
-    st.table(pd.DataFrame(events))
+        st.error(f"Telemetry compilation error: {str(e)}")
 
 # ---------------------------------------------------------
-# 9. INSTITUTIONAL FOOTER
+# TAB 3: PORTFOLIOS COMMAND CENTER
+# ---------------------------------------------------------
+with main_tab3:
+    st.markdown("### 💼 Portfolio Command Center")
+    port_df = pd.DataFrame(st.session_state.portfolio)
+    
+    col_p1, col_p2 = st.columns([1.8, 1.2])
+    with col_p1:
+        st.dataframe(port_df, use_container_width=True)
+        with st.expander("➕ Add Position"):
+            with st.form("add_pos"):
+                p_sym = st.text_input("Ticker Symbol").upper().strip()
+                p_comp = st.text_input("Company Name")
+                p_sh = st.number_input("Shares", min_value=1.0, value=10.0)
+                p_val = st.number_input("Total Position Value", min_value=1.0, value=1000.0)
+                p_gn = st.text_input("Gain/Loss %", value="+5.0%")
+                if st.form_submit_button("Add Position"):
+                    st.session_state.portfolio.append({"Ticker": p_sym, "Company": p_comp, "Shares": p_sh, "Value": p_val, "Gain": p_gn})
+                    st.rerun()
+
+    with col_p2:
+        if not port_df.empty:
+            fig_p = px.pie(port_df, values='Value', names='Ticker', title="Asset Allocation (Value USD)", hole=0.45)
+            fig_p.update_layout(template="plotly_dark", height=280, margin=dict(l=10, r=10, t=30, b=10))
+            st.plotly_chart(fig_p, use_container_width=True)
+
+# ---------------------------------------------------------
+# TAB 4: SCREENER & WATCHLIST
+# ---------------------------------------------------------
+with main_tab4:
+    st.markdown("### ⭐ Equity Screener & Valuation Ranks")
+    sample_screener = pd.DataFrame([
+        {"Ticker": "NVDA", "Name": "NVIDIA", "Market": "US", "P/E": 32.4, "Div Yield": "0.03%", "Snowflake Health": "5.6/6"},
+        {"Ticker": "EQNR.OL", "Name": "Equinor", "Market": "NO", "P/E": 7.8, "Div Yield": "8.40%", "Snowflake Health": "5.8/6"},
+        {"Ticker": "NOVO-B.CO", "Name": "Novo Nordisk", "Market": "DK", "P/E": 34.1, "Div Yield": "1.20%", "Snowflake Health": "5.4/6"},
+        {"Ticker": "ASML", "Name": "ASML Holding", "Market": "NL", "P/E": 41.2, "Div Yield": "0.90%", "Snowflake Health": "5.2/6"},
+        {"Ticker": "VOLV-B.ST", "Name": "Volvo Group", "Market": "SE", "P/E": 10.2, "Div Yield": "6.80%", "Snowflake Health": "5.1/6"},
+    ])
+    st.dataframe(sample_screener, use_container_width=True)
+
+# ---------------------------------------------------------
+# 8. INSTITUTIONAL FOOTER (© 2026 ISERVE)
 # ---------------------------------------------------------
 st.markdown("""
 <div class="footer-container">
     <div class="footer-grid">
         <div class="footer-col">
-            <h4>Corporate</h4>
-            <a href="#">Investor Relations</a>
+            <h4>Investor relations</h4>
             <a href="#">Careers</a>
-            <a href="#">Trust Center</a>
+            <a href="#">Trust Centre</a>
             <a href="#">Accessibility</a>
         </div>
         <div class="footer-col">
-            <h4>Commercial</h4>
-            <a href="#">Contact</a>
+            <h4>Contact</h4>
             <a href="#">Advertise</a>
             <a href="#">MarketSite</a>
             <a href="#">Newsletters</a>
         </div>
         <div class="footer-col">
-            <h4>Compliance & Legal</h4>
-            <a href="#">Privacy Policy</a>
+            <h4>Privacy Policy</h4>
             <a href="#">Cookies</a>
             <a href="#">Legal</a>
-            <a href="#">Do Not Sell or Share My Personal Information</a>
+            <a href="#">Do NOT SELL or SHARE My Personal Information</a>
         </div>
         <div class="footer-col">
             <h4>MarketCatalyst AI</h4>
             <p style="color: #6b7280; font-size: 12px; line-height: 1.5;">
-                Advanced institutional research platform delivering real-time multi-asset intelligence and factor modeling across US, Nordic, and international equity markets.
+                Institutional research platform delivering real-time multi-asset intelligence and snowflake modeling across US, Nordic, and global equity markets.
             </p>
         </div>
     </div>
