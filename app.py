@@ -72,17 +72,17 @@ with col_title:
   )
   st.markdown(
       "<p style='color:#94A3B8; font-size:13px; margin-top:2px;'>We Serve, You"
-      " Prosper &bull; Institutional Equity Research &amp; Consensus"
+      " Prosper &bull; Global Institutional Equity Research &amp; Consensus"
       " Intelligence</p>",
       unsafe_allow_html=True,
   )
 
 # -------------------------------------------------------------
-# MARKET DIRECTORY & TICKER HIERARCHY
+# GLOBAL MARKET REGISTRY WITH FLAGS & EXCHANGES
 # -------------------------------------------------------------
-MARKET_REGISTRY = {
+GLOBAL_MARKETS = {
     "Norway 🇳🇴": {
-        "Oslo Børs (OSEBX) - Energy & Offshore": {
+        "Oslo Børs (OSEBX) - Energy & Shipping": {
             "EQNR.OL": "Equinor ASA (EQNR.OL)",
             "AKRBP.OL": "Aker BP ASA (AKRBP.OL)",
             "VAR.OL": "Vår Energi ASA (VAR.OL)",
@@ -98,7 +98,7 @@ MARKET_REGISTRY = {
             "NHY.OL": "Norsk Hydro ASA (NHY.OL)",
             "ORK.OL": "Orkla ASA (ORK.OL)",
         },
-        "Oslo Børs (OSEBX) - Seafood & Marine": {
+        "Oslo Børs (OSEBX) - Seafood & Maritime": {
             "MOWI.OL": "Mowi ASA (MOWI.OL)",
             "SALM.OL": "SalMar ASA (SALM.OL)",
             "LSG.OL": "Lerøy Seafood Group ASA (LSG.OL)",
@@ -114,7 +114,7 @@ MARKET_REGISTRY = {
         },
     },
     "United States 🇺🇸": {
-        "NASDAQ - Mega-Cap Technology": {
+        "NASDAQ - Mega-Cap Tech & Semis": {
             "NVDA": "NVIDIA Corporation (NVDA)",
             "AAPL": "Apple Inc. (AAPL)",
             "MSFT": "Microsoft Corporation (MSFT)",
@@ -124,13 +124,16 @@ MARKET_REGISTRY = {
             "TSLA": "Tesla, Inc. (TSLA)",
             "AVGO": "Broadcom Inc. (AVGO)",
             "AMD": "Advanced Micro Devices, Inc. (AMD)",
+            "QCOM": "QUALCOMM Inc. (QCOM)",
         },
-        "NYSE - Aerospace & Defense": {
+        "NYSE - Aerospace, Defense & Industrials": {
             "LMT": "Lockheed Martin Corp. (LMT)",
             "RTX": "RTX Corporation (RTX)",
             "NOC": "Northrop Grumman Corp. (NOC)",
             "GD": "General Dynamics Corp. (GD)",
             "BA": "The Boeing Company (BA)",
+            "GE": "GE Aerospace (GE)",
+            "CAT": "Caterpillar Inc. (CAT)",
         },
         "NYSE - Energy & Financials": {
             "XOM": "Exxon Mobil Corp. (XOM)",
@@ -140,20 +143,151 @@ MARKET_REGISTRY = {
             "BAC": "Bank of America Corp. (BAC)",
             "GS": "The Goldman Sachs Group (GS)",
             "MS": "Morgan Stanley (MS)",
+            "BLK": "BlackRock, Inc. (BLK)",
         },
-        "US Broad Market - Industrials & Healthcare": {
-            "CAT": "Caterpillar Inc. (CAT)",
-            "UNH": "UnitedHealth Group Inc. (UNH)",
+        "US Broad Market - Healthcare & Consumer": {
             "LLY": "Eli Lilly and Company (LLY)",
+            "UNH": "UnitedHealth Group Inc. (UNH)",
             "JNJ": "Johnson & Johnson (JNJ)",
-            "GE": "GE Aerospace (GE)",
+            "PFE": "Pfizer Inc. (PFE)",
+            "WMT": "Walmart Inc. (WMT)",
+            "COST": "Costco Wholesale Corp. (COST)",
         },
+    },
+    "United Kingdom 🇬🇧": {
+        "London Stock Exchange (FTSE 100) - Energy & Mining": {
+            "SHEL.L": "Shell PLC (SHEL.L)",
+            "BP.L": "BP PLC (BP.L)",
+            "RIO.L": "Rio Tinto PLC (RIO.L)",
+            "GLEN.L": "Glencore PLC (GLEN.L)",
+            "AAL.L": "Anglo American PLC (AAL.L)",
+        },
+        "London Stock Exchange (FTSE 100) - Healthcare & Finance": {
+            "AZN.L": "AstraZeneca PLC (AZN.L)",
+            "GSK.L": "GSK PLC (GSK.L)",
+            "HSBA.L": "HSBC Holdings PLC (HSBA.L)",
+            "LSEG.L": "London Stock Exchange Group (LSEG.L)",
+            "ULVR.L": "Unilever PLC (ULVR.L)",
+        },
+    },
+    "Sweden 🇸🇪": {
+        "Nasdaq Stockholm (OMXS30) - Industrials & Tech": {
+            "VOLV-B.ST": "Volvo AB Class B (VOLV-B.ST)",
+            "ATLAS-A.ST": "Atlas Copco AB (ATLAS-A.ST)",
+            "SAND.ST": "Sandvik AB (SAND.ST)",
+            "ABB.ST": "ABB Ltd (ABB.ST)",
+            "ERIC-B.ST": "Ericsson Class B (ERIC-B.ST)",
+            "EVO.ST": "Evolution AB (EVO.ST)",
+            "SEB-A.ST": "Skandinaviska Enskilda Banken (SEB-A.ST)",
+            "INVE-B.ST": "Investor AB Class B (INVE-B.ST)",
+        }
+    },
+    "Denmark 🇩🇰": {
+        "Nasdaq Copenhagen (OMXC25) - Blue Chips": {
+            "NOVO-B.CO": "Novo Nordisk A/S Class B (NOVO-B.CO)",
+            "MAERSK-B.CO": "A.P. Møller - Mærsk A/S (MAERSK-B.CO)",
+            "DSV.CO": "DSV A/S (DSV.CO)",
+            "ORSTED.CO": "Ørsted A/S (ORSTED.CO)",
+            "VWS.CO": "Vestas Wind Systems A/S (VWS.CO)",
+            "CARL-B.CO": "Carlsberg A/S (CARL-B.CO)",
+        }
+    },
+    "Germany 🇩🇪": {
+        "Frankfurt XETRA (DAX 40) - Industrials & Tech": {
+            "SAP.DE": "SAP SE (SAP.DE)",
+            "SIE.DE": "Siemens AG (SIE.DE)",
+            "BMW.DE": "Bayerische Motoren Werke AG (BMW.DE)",
+            "MBG.DE": "Mercedes-Benz Group AG (MBG.DE)",
+            "VOW3.DE": "Volkswagen AG (VOW3.DE)",
+            "ALV.DE": "Allianz SE (ALV.DE)",
+            "AIR.DE": "Airbus SE (AIR.DE)",
+            "IFX.DE": "Infineon Technologies AG (IFX.DE)",
+        }
+    },
+    "France 🇫🇷": {
+        "Euronext Paris (CAC 40) - Luxury & Energy": {
+            "MC.PA": "LVMH Moët Hennessy Louis Vuitton (MC.PA)",
+            "OR.PA": "L'Oréal S.A. (OR.PA)",
+            "RMS.PA": "Hermès International (RMS.PA)",
+            "TTE.PA": "TotalEnergies SE (TTE.PA)",
+            "SAN.PA": "Sanofi S.A. (SAN.PA)",
+            "AIR.PA": "Airbus SE (AIR.PA)",
+            "BNP.PA": "BNP Paribas S.A. (BNP.PA)",
+        }
+    },
+    "Switzerland 🇨🇭": {
+        "SIX Swiss Exchange (SMI) - Market Leaders": {
+            "NESN.SW": "Nestlé S.A. (NESN.SW)",
+            "ROG.SW": "Roche Holding AG (ROG.SW)",
+            "NOVN.SW": "Novartis AG (NOVN.SW)",
+            "UBSG.SW": "UBS Group AG (UBSG.SW)",
+            "CFR.SW": "Compagnie Financière Richemont (CFR.SW)",
+            "ZURN.SW": "Zurich Insurance Group (ZURN.SW)",
+        }
+    },
+    "Japan 🇯🇵": {
+        "Tokyo Stock Exchange (Nikkei 225) - Technology & Auto": {
+            "7203.T": "Toyota Motor Corporation (7203.T)",
+            "6758.T": "Sony Group Corporation (6758.T)",
+            "9984.T": "SoftBank Group Corp. (9984.T)",
+            "8035.T": "Tokyo Electron Ltd. (8035.T)",
+            "6861.T": "Keyence Corporation (6861.T)",
+            "9983.T": "Fast Retailing Co., Ltd. (9983.T)",
+        }
+    },
+    "Canada 🇨🇦": {
+        "Toronto Stock Exchange (TSX) - Energy & Banking": {
+            "SHOP.TO": "Shopify Inc. (SHOP.TO)",
+            "RY.TO": "Royal Bank of Canada (RY.TO)",
+            "TD.TO": "Toronto-Dominion Bank (TD.TO)",
+            "ENB.TO": "Enbridge Inc. (ENB.TO)",
+            "CNQ.TO": "Canadian Natural Resources (CNQ.TO)",
+            "ABX.TO": "Barrick Gold Corp. (ABX.TO)",
+        }
+    },
+    "Australia 🇦🇺": {
+        "Australian Securities Exchange (ASX) - Mining & Banking": {
+            "BHP.AX": "BHP Group Ltd (BHP.AX)",
+            "RIO.AX": "Rio Tinto Ltd (RIO.AX)",
+            "FMG.AX": "Fortescue Ltd (FMG.AX)",
+            "CBA.AX": "Commonwealth Bank of Australia (CBA.AX)",
+            "WDS.AX": "Woodside Energy Group Ltd (WDS.AX)",
+            "CSL.AX": "CSL Ltd (CSL.AX)",
+        }
+    },
+    "India 🇮🇳": {
+        "National Stock Exchange (NSE / Nifty 50)": {
+            "RELIANCE.NS": "Reliance Industries Ltd (RELIANCE.NS)",
+            "TCS.NS": "Tata Consultancy Services (TCS.NS)",
+            "HDFCBANK.NS": "HDFC Bank Ltd (HDFCBANK.NS)",
+            "INFY.NS": "Infosys Ltd (INFY.NS)",
+            "ICICIBANK.NS": "ICICI Bank Ltd (ICICIBANK.NS)",
+            "TATAMOTORS.NS": "Tata Motors Ltd (TATAMOTORS.NS)",
+        }
+    },
+    "Hong Kong / China 🇭🇰🇨🇳": {
+        "Hong Kong Stock Exchange (HKEX) - Tech & Bluechips": {
+            "0700.HK": "Tencent Holdings Ltd (0700.HK)",
+            "9988.HK": "Alibaba Group Holding Ltd (9988.HK)",
+            "3690.HK": "Meituan (3690.HK)",
+            "1211.HK": "BYD Company Ltd (1211.HK)",
+            "0941.HK": "China Mobile Ltd (0941.HK)",
+        }
+    },
+    "Brazil 🇧🇷": {
+        "B3 (Ibovespa) - Resource & Financial Leaders": {
+            "PETR4.SA": "Petróleo Brasileiro S.A. - Petrobras (PETR4.SA)",
+            "VALE3.SA": "Vale S.A. (VALE3.SA)",
+            "ITUB4.SA": "Itaú Unibanco Holding S.A. (ITUB4.SA)",
+            "BBDC4.SA": "Banco Bradesco S.A. (BBDC4.SA)",
+            "ABEV3.SA": "Ambev S.A. (ABEV3.SA)",
+        }
     },
 }
 
 
 def build_arrow_gauge(score, label_text):
-  """Builds a semi-circular speedometer with a tapered arrow calibration needle."""
+  """Builds a calibrated semi-circular speedometer with a tapered arrow needle."""
   score = max(1.0, min(5.0, float(score)))
   theta_deg = 180.0 - ((score - 1.0) / 4.0) * 180.0
   theta_rad = math.radians(theta_deg)
@@ -243,25 +377,25 @@ def build_arrow_gauge(score, label_text):
 
 
 # -------------------------------------------------------------
-# CASCADING SELECTION UI
+# CASCADING GLOBAL MARKET SELECTOR UI
 # -------------------------------------------------------------
-st.markdown("### 🌐 Select Market & Asset Coverage")
+st.markdown("### 🌐 Global Coverage & Asset Directory")
 
 sel_col1, sel_col2, sel_col3 = st.columns(3)
 
 with sel_col1:
   selected_country = st.selectbox(
-      "1. Select Country:", list(MARKET_REGISTRY.keys()), index=0
+      "1. Select Country:", list(GLOBAL_MARKETS.keys()), index=0
   )
 
 with sel_col2:
-  available_markets = list(MARKET_REGISTRY[selected_country].keys())
+  available_markets = list(GLOBAL_MARKETS[selected_country].keys())
   selected_market = st.selectbox(
-      "2. Select Exchange / Segment:", available_markets, index=1
+      "2. Select Exchange / Sector:", available_markets, index=0
   )
 
 with sel_col3:
-  tickers_dict = MARKET_REGISTRY[selected_country][selected_market]
+  tickers_dict = GLOBAL_MARKETS[selected_country][selected_market]
   ticker_options = list(tickers_dict.keys()) + ["Custom Ticker Entry..."]
   selected_ticker_option = st.selectbox(
       "3. Select Listed Equity:",
@@ -272,12 +406,12 @@ with sel_col3:
       ),
   )
 
-# Custom ticker override or direct dropdown assignment
 if selected_ticker_option == "Custom Ticker Entry...":
   ticker_input = (
       st.text_input(
-          "Enter Custom Ticker Symbol:",
-          placeholder="e.g., AKRBP.OL, FRO.OL, PLTR, MSFT",
+          "Enter Global Ticker Symbol:",
+          value="KOG.OL",
+          placeholder="e.g., EQNR.OL, KOG.OL, NVDA, TSLA, SHEL.L, NOVO-B.CO",
       )
       .strip()
       .upper()
@@ -297,14 +431,14 @@ if ticker_input:
   ):
     st.session_state.current_ticker = ticker_input
     st.session_state.report_generated = False
+    st.session_state.report_html = ""
 
-  # Ingest Market Data
   stock = yf.Ticker(ticker_input)
   info = stock.info or {}
   hist_1y = stock.history(period="1y")
 
   if hist_1y.empty:
-    st.error(f"No market data found for ticker: {ticker_input}")
+    st.error(f"No market telemetry found for ticker: {ticker_input}")
   else:
     curr_price = float(
         info.get("currentPrice")
@@ -345,7 +479,7 @@ if ticker_input:
     industry = info.get("industry", "Financial Markets")
     now_cest = datetime.datetime.now().strftime("%Y-%m-%d • %H:%M CEST")
 
-    # Consensus Target Calculations
+    # Target Price Metrics
     target_mean = float(info.get("targetMeanPrice") or (curr_price * 1.15))
     target_high = float(info.get("targetHighPrice") or (curr_price * 1.35))
     target_low = float(info.get("targetLowPrice") or (curr_price * 0.88))
@@ -634,7 +768,7 @@ if ticker_input:
 
         system_prompt = """
                 # Role & Identity
-                You are MarketCatalyst AI, an elite Equity Research Analyst covering US financial markets (S&P 500, NASDAQ) and Norwegian markets (Oslo Børs / OSEBX).
+                You are MarketCatalyst AI, an elite Equity Research Analyst covering global financial markets, US equities (S&P 500, NASDAQ), and Norwegian equities (Oslo Børs / OSEBX).
                 Structure high-density institutional intelligence strictly using these exact output markers:
 
                 [PRIMARY_STANCE]
@@ -649,7 +783,7 @@ if ticker_input:
                 <div class="p-3 bg-amber-50/60 rounded-lg border-l-2 border-amber-500"><strong class="text-slate-900 block font-semibold mb-1">Technical Pivot</strong>Mean reversion analysis relative to 200-DMA.</div>)
 
                 [MACRO_SENSITIVITY]
-                (Provide 3 <li> items detailing Norges Bank/Fed stance, USD/NOK or EUR/NOK effects, and commodity/sector drivers:
+                (Provide 3 <li> items detailing central bank stance, FX currency drivers, and commodity/sector dynamics:
                 <li class="flex items-start gap-2.5"><i data-lucide="check-circle-2" class="w-4 h-4 text-sky-700 shrink-0 mt-0.5"></i><div><strong class="text-slate-800">Macro Factor:</strong> Analysis.</div></li>)
 
                 [FUNDAMENTAL_HEALTH]
@@ -674,7 +808,6 @@ if ticker_input:
                 (Central bank rate decisions and macroeconomic filings)
                 """
 
-        # Automated Multi-Model Fallback Pipeline
         client = genai.Client(api_key=GEMINI_API_KEY)
         candidate_models = [
             "gemini-2.5-flash",
@@ -728,32 +861,32 @@ if ticker_input:
             "MACRO_SENSITIVITY",
             '<li class="flex items-start gap-2.5"><i data-lucide="check-circle-2"'
             ' class="w-4 h-4 text-sky-700 shrink-0 mt-0.5"></i><div><strong'
-            ' class="text-slate-800">FX Exposure:</strong> USD/NOK currency'
-            " translation tailwinds active.</div></li>",
+            ' class="text-slate-800">FX & Macro Exposure:</strong> Monetary and'
+            " currency translation dynamics active.</div></li>",
         )
         fundamental_health = extract_tag(
             res_text,
             "FUNDAMENTAL_HEALTH",
             '<li class="flex items-start gap-2.5"><i data-lucide="layers"'
             ' class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i><div><strong'
-            ' class="text-slate-800">Cash Flow:</strong> Dual-dividend structure'
-            " and low net debt maintained.</div></li>",
+            ' class="text-slate-800">Cash Flow:</strong> Capital allocation and'
+            " balance sheet liquidity maintained.</div></li>",
         )
         bull_case = extract_tag(
             res_text,
             "BULL_CASE",
             '<li class="flex items-start gap-2"><span class="font-mono font-bold'
             " text-emerald-700 bg-white px-1.5 py-0.5 rounded border"
-            ' border-emerald-200 shadow-xs">1</span><span><strong>Contract'
-            " Acceleration:</strong> Structural order wins.</span></li>",
+            ' border-emerald-200 shadow-xs">1</span><span><strong>Expansion:</strong>'
+            " Upside demand acceleration.</span></li>",
         )
         bear_case = extract_tag(
             res_text,
             "BEAR_CASE",
             '<li class="flex items-start gap-2"><span class="font-mono font-bold'
             " text-rose-700 bg-white px-1.5 py-0.5 rounded border"
-            ' border-rose-200 shadow-xs">1</span><span><strong>Capacity'
-            " Bottlenecks:</strong> Production lead time drag.</span></li>",
+            ' border-rose-200 shadow-xs">1</span><span><strong>Bottlenecks:</strong>'
+            " Execution drag and cost inflation.</span></li>",
         )
         watch_pivot = extract_tag(
             res_text,
@@ -768,10 +901,10 @@ if ticker_input:
         watch_macro = extract_tag(
             res_text,
             "MACRO_DATA",
-            "Norges Bank / Fed policy rate decisions and energy reports.",
+            "Central bank policy rate announcements and energy reports.",
         )
 
-        st.session_state.report_html = f"""<!DOCTYPE html>
+        rendered_html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -982,7 +1115,12 @@ if ticker_input:
   <script>lucide.createIcons();</script>
 </body>
 </html>"""
-        st.session_state.report_html = True
+        st.session_state.report_html = rendered_html
+        st.session_state.report_generated = True
 
-    if "report_html" in st.session_state:
-      components.html(st.session_state.report_html, height=1400, scrolling=True)
+    if (
+        "report_html" in st.session_state
+        and isinstance(st.session_state.report_html, str)
+        and len(st.session_state.report_html) > 0
+    ):
+      components.html(st.session_state.report_html, height=1450, scrolling=True)
