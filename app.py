@@ -3,10 +3,44 @@ import streamlit as st
 import yfinance as yf
 from google import genai
 
-# Fetch API key from Streamlit Secrets or Environment Variable
 GEMINI_API_KEY = st.secrets.get(
     "GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", "")
 ).strip()
+
+DISCLAIMER_TEXT = """
+### Important Information & Research Disclaimer
+**Research for informational and educational purposes only — not personalised investment advice.**
+
+This IsewaInvest report has been prepared by Isewa Investment (IsewaInvest) using publicly available information, historical market data, financial information, market trends, macroeconomic conditions, company-specific factors, valuation metrics and other sources considered relevant at the time of preparation.
+
+The report is intended to provide independent research and analytical information and does not take into account any individual investor's financial situation, investment objectives, knowledge, experience, risk tolerance, investment horizon or capacity for loss.
+
+Nothing contained in this report constitutes personalised investment advice, financial advice, a personal recommendation, an offer, solicitation or invitation to buy, sell or hold any financial instrument.
+
+---
+
+#### Analysis, Estimates & Price Scenarios
+Any forecasts, estimates, valuations, price targets, Bull/Base/Bear scenarios, expected returns, projections or opinions presented in this report are analytical estimates and scenarios, not predictions or guarantees. Such estimates are based on assumptions that may change materially. Actual results and market prices may differ substantially from the scenarios presented. **Past performance is not a reliable indicator of future performance.**
+
+#### Investment Risk
+Investing in financial markets involves risk. The value of investments may rise or fall, and investors may lose part or all of their invested capital. Market prices can be affected by interest rates, inflation, economic conditions, company performance, earnings expectations, liquidity, currency movements, geopolitical events, regulation, taxation and investor sentiment. **Investors should not invest money they cannot afford to lose.**
+
+#### Independent Due Diligence
+**Do your own research before making any investment decision.** Readers should independently verify the latest financial statements, company announcements, regulatory filings, valuation data, market conditions and other relevant information before acting on any information contained in this report. Where appropriate, seek advice from an authorized financial, investment or tax professional.
+
+#### Sources & Data
+IsewaInvest seeks to use reliable and publicly available sources. However, third-party data and public filings may contain errors, omissions, delays or subsequent revisions. AI-assisted analysis may be used in the preparation of reports; AI-generated interpretations and estimates should be independently verified against authoritative primary sources.
+
+#### Conflicts of Interest
+Isewa Investment will disclose any material interest or known conflict of interest relating to a financial instrument or issuer where required by applicable law or regulation. Readers should not assume that the absence of a disclosure means that no potential conflict exists.
+
+#### Regulatory & Market-Conduct Notice
+IsewaInvest research is presented objectively and transparently in accordance with relevant Norwegian and EEA requirements, including the Market Abuse Regulation (MAR) and applicable rules concerning investment recommendations.
+
+---
+**Final Reminder:** *Research informs. You decide.*  
+**IsewaInvest** — Independent Equity Research & Market Intelligence.
+"""
 
 st.set_page_config(
     page_title="IsewaInvest | Equity Research Terminal",
@@ -38,10 +72,10 @@ with col2:
 
 if run_btn and ticker_input:
   with st.spinner(
-      f"Ingesting live telemetry & synthesizing research for {ticker_input}..."
+      f"Ingesting market telemetry & synthesizing research for"
+      f" {ticker_input}..."
   ):
     try:
-      # 1. Fetch live market telemetry
       stock = yf.Ticker(ticker_input)
       info = stock.info or {}
       hist = stock.history(period="1y")
@@ -87,7 +121,6 @@ if run_btn and ticker_input:
                 Market Cap: {info.get('marketCap', 'N/A')} {currency}
                 """
 
-        # 2. Institutional Synthesis via Gemini
         client = genai.Client(api_key=GEMINI_API_KEY)
         system_prompt = """
                 You are IsewaInvest AI, an elite Equity Research Analyst covering US markets (S&P 500, NASDAQ) and Norwegian markets (OSEBX).
@@ -101,13 +134,23 @@ if run_btn and ticker_input:
                 """
 
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=[system_prompt, market_context],
+            model="gemini-3.6-flash", contents=[system_prompt, market_context]
         )
 
         st.success(f"Report Generated: {info.get('longName', ticker_input)}")
         st.markdown("---")
         st.markdown(response.text)
+
+        # Institutional Compliance & Legal Scaffolding
+        st.markdown("---")
+        with st.expander("⚖️ Important Information & Research Disclaimer"):
+          st.markdown(DISCLAIMER_TEXT)
+          st.download_button(
+              label="📥 Download Research Disclaimer (TXT)",
+              data=DISCLAIMER_TEXT,
+              file_name="IsewaInvest_Research_Disclaimer.txt",
+              mime="text/plain",
+          )
 
     except Exception as e:
       st.error(f"Execution Error: {str(e)}")
