@@ -27,13 +27,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. CLIENT INITIALIZATION
+# 2. CLIENT INITIALIZATION & CREDENTIAL SANITIZATION
 # ---------------------------------------------------------
 @st.cache_resource
 def init_supabase() -> Client:
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["key"]
-    return create_client(url, key)
+    raw_url = str(st.secrets["supabase"]["url"]).strip().strip('"\'').rstrip("/")
+    raw_key = str(st.secrets["supabase"]["key"]).strip().strip('"\'')
+    
+    if not raw_url.startswith("http://") and not raw_url.startswith("https://"):
+        raw_url = f"https://{raw_url}"
+        
+    return create_client(raw_url, raw_key)
 
 supabase = init_supabase()
 
@@ -42,7 +46,7 @@ def get_gemini_client():
     return genai.Client(api_key=api_key)
 
 # ---------------------------------------------------------
-# 3. AUTHENTICATION HANDLERS
+# 3. AUTHENTICATION HANDLERS & PROFILE SYNC
 # ---------------------------------------------------------
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -50,9 +54,12 @@ if "profile" not in st.session_state:
     st.session_state.profile = None
 
 def fetch_profile(user_id):
-    res = supabase.table("profiles").select("*").eq("id", user_id).execute()
-    if res.data:
-        return res.data[0]
+    try:
+        res = supabase.table("profiles").select("*").eq("id", user_id).execute()
+        if res.data and len(res.data) > 0:
+            return res.data[0]
+    except Exception:
+        pass
     return None
 
 def auth_screen():
@@ -71,12 +78,12 @@ def auth_screen():
                 
                 if submit:
                     try:
-                        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                        res = supabase.auth.sign_in_with_password({"email": email.strip(), "password": password})
                         st.session_state.user = res.user
                         st.session_state.profile = fetch_profile(res.user.id)
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Authentication Failed: {str(e)}")
+                        st.error(f"Sign in failed: {str(e)}")
 
         with tab_signup:
             with st.form("signup_form"):
@@ -88,16 +95,16 @@ def auth_screen():
                 if su_submit:
                     try:
                         res = supabase.auth.sign_up({
-                            "email": su_email,
+                            "email": su_email.strip(),
                             "password": su_password,
-                            "options": {"data": {"full_name": su_name}}
+                            "options": {"data": {"full_name": su_name.strip()}}
                         })
-                        st.success("Account created successfully. Please switch to the Sign In tab to enter.")
+                        st.success("Account created successfully. You can now switch to the 'Sign In' tab.")
                     except Exception as e:
-                        st.error(f"Registration Failed: {str(e)}")
+                        st.error(f"Account creation failed: {str(e)}")
 
 # ---------------------------------------------------------
-# 4. CORE TERMINAL INTERFACE
+# 4. CORE TERMINAL INTERFACE & RESEARCH WORKFLOW
 # ---------------------------------------------------------
 def render_terminal():
     user = st.session_state.user
@@ -110,7 +117,10 @@ def render_terminal():
         st.markdown(f"Tier: <span class='{badge_class}'>{tier.upper()}</span>", unsafe_allow_html=True)
         st.markdown("---")
         
-        market_universe = st.radio("Primary Market", ["US Equities (S&P 500 / NASDAQ)", "Norwegian Equities (OSEBX / Euronext)"])
+        market_universe = st.radio(
+            "Primary Market", 
+            ["US Equities (S&P 500 / NASDAQ / NYSE)", "Norwegian Equities (OSEBX / Euronext)"]
+        )
         default_ticker = "NVDA" if "US" in market_universe else "EQNR.OL"
         ticker = st.text_input("Ticker Symbol", value=default_ticker).upper().strip()
         timeframe = st.selectbox("Historical Benchmark Window", ["1mo", "3mo", "6mo", "1y", "2y", "5y"], index=3)
@@ -130,9 +140,10 @@ def render_terminal():
         info = stock.info
         
         if hist.empty:
-            st.warning(f"No market series located for symbol `{ticker}`. Verify ticker suffix (e.g., `.OL` for Oslo Børs).")
+            st.warning(f"No market data found for `{ticker}`. Verify ticker suffix (e.g., `.OL` for Oslo Børs).")
             return
 
+        # Core Metrics Display
         c1, c2, c3, c4 = st.columns(4)
         currency = info.get("currency", "USD")
         current_price = hist['Close'].iloc[-1]
@@ -142,8 +153,10 @@ def render_terminal():
         c1.metric(label=f"Price ({currency})", value=f"{current_price:,.2f}", delta=f"{pct_change:+.2f}%")
         c2.metric(label="Market Cap", value=f"{info.get('marketCap', 0):,}")
         c3.metric(label="Trailing P/E", value=f"{info.get('trailingPE', 'N/A')}")
-        c4.metric(label="Dividend Yield", value=f"{(info.get('dividendYield') or 0)*100:.2f}%" if info.get('dividendYield') else "N/A")
+        div_yield = info.get('dividendYield')
+        c4.metric(label="Dividend Yield", value=f"{div_yield*100:.2f}%" if div_yield else "N/A")
 
+        # Interactive Candlestick Chart
         fig = go.Figure(data=[go.Candlestick(
             x=hist.index,
             open=hist['Open'],
@@ -160,32 +173,52 @@ def render_terminal():
         )
         st.plotly_chart(fig, use_container_width=True)
 
+        # Catalyst & Scenario Analysis Interface
         st.markdown("### 📋 Institutional Catalyst Breakdown & Macro Synthesis")
         analysis_prompt = st.text_area(
-            "Event Trigger / Context Input", 
-            value=f"Evaluate recent earnings disclosures, macro conditions (Fed/Norges Bank policy rates), and margin durability for {ticker}."
+            "Event Trigger / Analysis Context", 
+            value=f"Evaluate recent quarterly earnings, monetary policy posture (Fed / Norges Bank), and balance sheet durability for {ticker}."
         )
 
         if st.button("Generate Catalyst Analysis", type="primary"):
-            with st.spinner("Synthesizing multi-source intelligence..."):
+            with st.spinner("Synthesizing multi-source financial telemetry..."):
                 client = get_gemini_client()
                 
-                system_instruction = (
-                    "You are MarketCatalyst AI, an elite Equity Research Analyst specializing in US and Norwegian equities. "
-                    "Analyze events systematically using: 1. Catalyst Breakdown, 2. Historical Context & Price Action, "
-                    "3. Macro & Sector Drivers (Fed/Norges Bank, rates, FX USD/NOK, Brent oil), "
-                    "4. Fundamental & Dividend Health, 5. Scenario Synthesis (Bull/Bear & Watchpoints). "
-                    "Use precise, institutional terminology, avoid sensationalism, and format with bold headers and scannable bullet points."
-                )
+                system_instruction = """
+You are MarketCatalyst AI, an elite Equity Research Analyst and Financial Intelligence Specialist. Your domain expertise covers both US financial markets (S&P 500, NASDAQ, NYSE) and Norwegian markets (Oslo Børs / OSEBX). You specialize in event-driven financial analysis, correlating historical price behavior with news releases, leadership statements, corporate filings, and macroeconomic developments.
+
+Core Objectives:
+1. Analyze how historical price actions correlate with specific news triggers, earnings releases, and executive statements.
+2. Evaluate macroeconomic drivers, specifically monetary policy from the US Federal Reserve and Norges Bank, interest rate shifts, inflation data, and commodity impacts (especially oil/energy on the Oslo Børs).
+3. Digest corporate reports (10-K, 10-Q, 8-K, Norwegian quarterly/annual reports), dividend changes, and earnings call transcripts to assess fundamental health.
+4. Synthesize multi-source data to provide objective, institutional-grade market assessments.
+
+Key Analytical Framework:
+1. Catalyst Breakdown: Identify the core event (e.g., quarterly earnings release, executive guidance, interest rate decision, regulatory flash, or dividend announcement).
+2. Historical Context & Price Action: Compare the current event against historical precedent (e.g., past earnings beats/misses, price reactions to rate hikes/cuts, or prior CEO guidance revisions).
+3. Macro & Sector Drivers:
+   - For US stocks: Evaluate S&P 500/NASDAQ trends, Wall Street sentiment, US Treasury yields, and Fed policy.
+   - For Norwegian stocks: Evaluate OSEBX dynamics, Norges Bank policy rates, Brent crude prices, foreign exchange impacts (USD/NOK, EUR/NOK), and European market conditions.
+4. Fundamental & Dividend Health: Review revenue/EPS trends, balance sheet strength, dividend sustainability (payout ratios, ex-dividend dates), and capital allocation plans.
+5. Scenario Synthesis: Present balanced bull and bear perspectives, upcoming risk factors, key watchpoints, and relevant date triggers.
+
+Communication Guidelines & Formatting:
+- Clarity & Scannability: Minimize introductory fluff. Jump directly into the analysis using structured bullet points, clear bold sub-headers, and comparison tables where applicable.
+- Currency & Market Precision: Keep currencies consistent and explicit (USD vs. NOK). Clearly distinguish between US market conventions (SEC filings, Fed speak) and Norwegian/Nordic conventions (Euronext Oslo, Norges Bank).
+- Data Integrity: Never guess or hallucinate financial metrics, stock quotes, or historical dates. If specific data is unverified or outside the prompt context, state the limitation clearly.
+- Professional Tone: Maintain an objective, institutional, and analytically grounded tone. Avoid sensationalist language in favor of data-driven descriptors.
+- Financial Compliance: Provide market intelligence and educational analysis; never deliver direct, personalized investment advice.
+"""
 
                 prompt = f"""
-                Analyze the following security and event context:
-                - Security: {ticker} ({info.get('longName', ticker)})
-                - Sector/Industry: {info.get('sector', 'N/A')} / {info.get('industry', 'N/A')}
-                - Market: {market_universe}
-                - Recent Close: {current_price:.2f} {currency}
-                - Analysis Objective: {analysis_prompt}
-                """
+Analyze the following security and event context according to the 5-step Analytical Framework:
+- Security: {ticker} ({info.get('longName', ticker)})
+- Sector / Industry: {info.get('sector', 'N/A')} / {info.get('industry', 'N/A')}
+- Market Universe: {market_universe}
+- Current Reference Price: {current_price:.2f} {currency}
+- Historical Trailing P/E: {info.get('trailingPE', 'N/A')}
+- User Context / Target Trigger: {analysis_prompt}
+"""
 
                 response = client.models.generate_content(
                     model='gemini-2.5-flash',
