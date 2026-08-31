@@ -1,4 +1,5 @@
 import os
+import re
 import streamlit as st
 from supabase import create_client, Client
 from google import genai
@@ -27,21 +28,34 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. CLIENT INITIALIZATION (DIRECT PUBLIC ENDPOINT)
+# 2. CLIENT INITIALIZATION (DYNAMIC SECRETS BINDING)
 # ---------------------------------------------------------
-SUPABASE_URL = "https://stpgiquvvvmghmgmypfl.supabase.co"
-
-def get_supabase_client() -> Client:
-    # Retrieve key from secrets or fallback
-    raw_key = ""
-    if "supabase" in st.secrets and "key" in st.secrets["supabase"]:
-        raw_key = str(st.secrets["supabase"]["key"]).strip().strip('"\'')
-    elif "SUPABASE_KEY" in st.secrets:
-        raw_key = str(st.secrets["SUPABASE_KEY"]).strip().strip('"\'')
+def get_supabase_credentials():
+    raw_url = st.secrets.get("supabase", {}).get("url", "")
+    raw_key = st.secrets.get("supabase", {}).get("key", "")
+    
+    # Fallback to flat secret keys if nested table wasn't used
+    if not raw_url:
+        raw_url = st.secrets.get("SUPABASE_URL", "")
+    if not raw_key:
+        raw_key = st.secrets.get("SUPABASE_KEY", "")
         
-    return create_client(SUPABASE_URL, raw_key)
+    clean_url = str(raw_url).strip().strip('"\'').rstrip("/")
+    clean_key = str(raw_key).strip().strip('"\'')
+    
+    return clean_url, clean_key
 
-supabase = get_supabase_client()
+@st.cache_resource
+def init_supabase() -> Client:
+    url, key = get_supabase_credentials()
+    if not url or not key:
+        raise ValueError("Supabase URL or Key is missing from Streamlit Secrets.")
+    return create_client(url, key)
+
+try:
+    supabase = init_supabase()
+except Exception as e:
+    st.error(f"Supabase Initialization Error: {str(e)}")
 
 def get_gemini_client():
     api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
@@ -101,7 +115,7 @@ def auth_screen():
                             "password": su_password,
                             "options": {"data": {"full_name": su_name.strip()}}
                         })
-                        st.success("Account created successfully. Switch to the 'Sign In' tab to log in.")
+                        st.success("Account created successfully. Please switch to the 'Sign In' tab to proceed.")
                     except Exception as e:
                         st.error(f"Account creation failed: {str(e)}")
 
@@ -142,7 +156,7 @@ def render_terminal():
         info = stock.info
         
         if hist.empty:
-            st.warning(f"No market data located for `{ticker}`. Verify symbol suffix (e.g. `.OL` for Oslo Børs).")
+            st.warning(f"No market data located for `{ticker}`. Verify ticker suffix (e.g., `.OL` for Oslo Børs).")
             return
 
         c1, c2, c3, c4 = st.columns(4)
@@ -180,7 +194,7 @@ def render_terminal():
         )
 
         if st.button("Generate Catalyst Analysis", type="primary"):
-            with st.spinner("Synthesizing multi-source financial intelligence..."):
+            with st.spinner("Synthesizing multi-source financial telemetry..."):
                 client = get_gemini_client()
                 
                 system_instruction = """
@@ -188,12 +202,12 @@ You are MarketCatalyst AI, an elite Equity Research Analyst and Financial Intell
 
 Key Analytical Framework:
 1. Catalyst Breakdown: Identify the core event (e.g., quarterly earnings release, executive guidance, interest rate decision, regulatory flash, or dividend announcement).
-2. Historical Context & Price Action: Compare the current event against historical precedent (e.g., past earnings beats/misses, price reactions to rate hikes/cuts, or prior CEO guidance revisions).
+2. Historical Context & Price Action: Compare the current event against historical precedent (past beats/misses, reaction to rate shifts).
 3. Macro & Sector Drivers:
-   - For US stocks: Evaluate S&P 500/NASDAQ trends, Wall Street sentiment, US Treasury yields, and Fed policy.
-   - For Norwegian stocks: Evaluate OSEBX dynamics, Norges Bank policy rates, Brent crude prices, foreign exchange impacts (USD/NOK, EUR/NOK), and European market conditions.
-4. Fundamental & Dividend Health: Review revenue/EPS trends, balance sheet strength, dividend sustainability (payout ratios, ex-dividend dates), and capital allocation plans.
-5. Scenario Synthesis: Present balanced bull and bear perspectives, upcoming risk factors, key watchpoints, and relevant date triggers.
+   - For US stocks: Evaluate S&P 500/NASDAQ trends, Treasury yields, and Fed policy.
+   - For Norwegian stocks: Evaluate OSEBX dynamics, Norges Bank policy rates, Brent crude pricing, and USD/NOK exchange rates.
+4. Fundamental & Dividend Health: Review revenue/EPS trajectories, liquidity, free cash flow conversion, and dividend sustainability.
+5. Scenario Synthesis: Formulate clear Bull/Bear pathways, risk factors, and upcoming catalyst dates.
 
 Format with bold headers, concise bullet points, and scannable data. Maintain institutional rigor and objectivity. Provide market intelligence and educational analysis without personalized investment advice.
 """
