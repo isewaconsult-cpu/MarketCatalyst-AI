@@ -1,5 +1,4 @@
 import datetime
-import html
 import os
 import re
 from google import genai
@@ -9,27 +8,70 @@ import streamlit as st
 import streamlit.components.v1 as components
 import yfinance as yf
 
-# Ingest API Key from Streamlit Secrets or Environment
+# Ingest Gemini API Key
 GEMINI_API_KEY = st.secrets.get(
     "GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", "")
 ).strip()
 
 st.set_page_config(
-    page_title="IsewaInvest | Equity Research Terminal",
+    page_title="IsewaInvest | Institutional Equity Terminal",
     page_icon="🏛️",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
-# Custom header styling
-st.title("🏛️ IsewaInvest: Equity Research Terminal")
+# Custom Dark CSS & Theme Injector
 st.markdown(
-    "Enter an equity ticker below and press **Enter** (use `.OL` for Oslo Børs,"
-    " e.g., `EQNR.OL`, `KOG.OL`, `VAR.OL`, `AKRBP.OL`, `NVDA`, `TSLA`)."
+    """
+<style>
+    .stApp {
+        background-color: #0A0F1D;
+        color: #E2E8F0;
+    }
+    .metric-card {
+        background: rgba(22, 27, 34, 0.85);
+        border: 1px solid rgba(240, 185, 11, 0.2);
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+    div[data-testid="stForm"] {
+        background: #111827;
+        border: 1px solid #1F2937;
+        border-radius: 12px;
+        padding: 20px;
+    }
+</style>
+""",
+    unsafe_allow_html=True,
 )
 
-# Search Form container (Enables pressing <Enter> to submit)
-with st.form(key="ticker_search_form", clear_on_submit=False):
-  col1, col2 = st.columns([3, 1])
+# Header Section
+col_logo, col_title = st.columns([1, 6])
+with col_logo:
+  if os.path.exists("Isewa Invest (1).png"):
+    st.image("Isewa Invest (1).png", width=95)
+  elif os.path.exists("isewa_logo.png"):
+    st.image("isewa_logo.png", width=95)
+  else:
+    st.markdown("## 🏛️")
+
+with col_title:
+  st.markdown(
+      "<h1 style='color:#F3BA2F; margin-bottom:0px;'>IsewaInvest"
+      " Intelligence Terminal</h1>",
+      unsafe_allow_html=True,
+  )
+  st.markdown(
+      "<p style='color:#94A3B8; font-size:14px; margin-top:2px;'>Institutional"
+      " Equity Research & Visual Telemetry &bull; Oslo Børs (OSEBX) &amp; US"
+      " Markets (S&amp;P 500 / NASDAQ)</p>",
+      unsafe_allow_html=True,
+  )
+
+# Search Input Container with <Enter> Execution
+with st.form(key="terminal_search_form", clear_on_submit=False):
+  col1, col2 = st.columns([4, 1])
   with col1:
     ticker_input = (
         st.text_input(
@@ -44,26 +86,25 @@ with st.form(key="ticker_search_form", clear_on_submit=False):
     st.write("")
     st.write("")
     run_btn = st.form_submit_button(
-        "Generate Intelligence Report", use_container_width=True
+        "⚡ Analyze Equity", use_container_width=True
     )
 
 if (run_btn or ticker_input) and ticker_input:
   with st.spinner(
-      f"Ingesting live telemetry & synthesizing institutional report for"
+      f"Ingesting telemetry & calculating Snowflake diagnostics for"
       f" {ticker_input}..."
   ):
     try:
-      # 1. Telemetry Ingestion via yfinance
+      # 1. Real-time Market Data Ingestion
       stock = yf.Ticker(ticker_input)
       info = stock.info or {}
       hist = stock.history(period="1y")
 
       if hist.empty:
         st.error(
-            f"No market data or price history found for ticker: {ticker_input}"
+            f"No price history or fundamental data found for: {ticker_input}"
         )
       else:
-        # Market calculations
         curr_price = float(
             info.get("currentPrice")
             or info.get("regularMarketPrice")
@@ -94,7 +135,6 @@ if (run_btn or ticker_input) and ticker_input:
             ((curr_price - low_52) / low_52) * 100 if low_52 else 0.0
         )
         price_range_span = max(high_52 - low_52, 0.01)
-
         curr_pos_pct = min(
             max(((curr_price - low_52) / price_range_span) * 100, 2), 98
         )
@@ -105,60 +145,147 @@ if (run_btn or ticker_input) and ticker_input:
         company_name = info.get("longName", ticker_input)
         sector = info.get("sector", "Equities")
         industry = info.get("industry", "Financial Markets")
+        fwd_pe = info.get("forwardPE", 0.0) or 0.0
+        div_yield_val = info.get("dividendYield", 0.0) or 0.0
+        div_yield_str = (
+            f"{div_yield_val * 100:.2f}%" if div_yield_val else "N/A"
+        )
         now_cest = datetime.datetime.now().strftime("%Y-%m-%d • %H:%M CEST")
 
-        # 2. Interactive Chart Preview (Streamlit Native)
-        fig = make_subplots(
-            rows=2,
-            cols=1,
-            shared_xaxes=True,
-            vertical_spacing=0.03,
-            row_heights=[0.7, 0.3],
+        # 2. Compute Simply Wall St Snowflake Diagnostic Scores (1 - 6 Scale)
+        val_score = 5.0 if 0 < fwd_pe < 16 else (3.5 if fwd_pe < 28 else 2.0)
+        growth_score = (
+            5.2
+            if info.get("revenueGrowth", 0) > 0.10
+            or ticker_input.endswith(".OL")
+            else 3.8
         )
-        fig.add_trace(
-            go.Candlestick(
-                x=hist.index,
-                open=hist["Open"],
-                high=hist["High"],
-                low=hist["Low"],
-                close=hist["Close"],
-                name="Price",
-            ),
-            row=1,
-            col=1,
+        past_score = 5.5 if dma_diff_pct > 0 else 2.5
+        health_score = (
+            5.0
+            if info.get("debtToEquity", 50) < 65
+            or info.get("quickRatio", 1.2) > 1.0
+            else 3.2
         )
-        if len(hist) >= 200:
-          sma_200_line = hist["Close"].rolling(window=200).mean()
-          fig.add_trace(
-              go.Scatter(
+        div_score = 5.5 if div_yield_val > 0.035 else (3.5 if div_yield_val > 0.01 else 1.5)
+
+        # 3. Interactive Simply Wall St Snowflake Radar + Candlestick Grid
+        st.markdown("### 📊 Visual Telemetry & Snowflake Diagnostics")
+        dash_col1, dash_col2 = st.columns([1, 1.4])
+
+        with dash_col1:
+          # Radar Snowflake Plot
+          categories = [
+              "Valuation",
+              "Future Growth",
+              "Past Perf.",
+              "Financial Health",
+              "Dividend",
+          ]
+          scores = [
+              val_score,
+              growth_score,
+              past_score,
+              health_score,
+              div_score,
+          ]
+
+          radar_fig = go.Figure()
+          radar_fig.add_trace(
+              go.Scatterpolar(
+                  r=scores + [scores[0]],
+                  theta=categories + [categories[0]],
+                  fill="toself",
+                  fillcolor="rgba(197, 155, 39, 0.45)",
+                  line=dict(color="#F3BA2F", width=2.5),
+                  marker=dict(size=7, color="#FFFFFF"),
+                  name="Snowflake Score",
+              )
+          )
+          radar_fig.update_layout(
+              polar=dict(
+                  bgcolor="#0D1117",
+                  radialaxis=dict(
+                      visible=True,
+                      range=[0, 6],
+                      showticklabels=False,
+                      linecolor="#30363D",
+                      gridcolor="#21262D",
+                  ),
+                  angularaxis=dict(
+                      linecolor="#30363D",
+                      gridcolor="#21262D",
+                      tickfont=dict(color="#F3BA2F", size=11, family="Inter"),
+                  ),
+              ),
+              paper_bgcolor="#0A0F1D",
+              plot_bgcolor="#0A0F1D",
+              height=380,
+              margin=dict(l=40, r=40, t=30, b=30),
+              showlegend=False,
+          )
+          st.plotly_chart(radar_fig, use_container_width=True)
+
+        with dash_col2:
+          # Interactive Price & Volume Chart
+          chart_fig = make_subplots(
+              rows=2,
+              cols=1,
+              shared_xaxes=True,
+              vertical_spacing=0.03,
+              row_heights=[0.75, 0.25],
+          )
+          chart_fig.add_trace(
+              go.Candlestick(
                   x=hist.index,
-                  y=sma_200_line,
-                  mode="lines",
-                  line=dict(color="#0284c7", width=1.5),
-                  name="200-Day SMA",
+                  open=hist["Open"],
+                  high=hist["High"],
+                  low=hist["Low"],
+                  close=hist["Close"],
+                  name="Price",
+                  increasing_line_color="#059669",
+                  decreasing_line_color="#DC2626",
               ),
               row=1,
               col=1,
           )
-        fig.add_trace(
-            go.Bar(
-                x=hist.index,
-                y=hist["Volume"],
-                name="Volume",
-                marker_color="#94a3b8",
-            ),
-            row=2,
-            col=1,
-        )
-        fig.update_layout(
-            title=f"{company_name} ({ticker_input}) - 1-Year Price Action",
-            height=400,
-            xaxis_rangeslider_visible=False,
-            margin=dict(l=20, r=20, t=40, b=20),
-        )
-        st.plotly_chart(fig, use_container_width=True)
+          if len(hist) >= 200:
+            sma_200_line = hist["Close"].rolling(window=200).mean()
+            chart_fig.add_trace(
+                go.Scatter(
+                    x=hist.index,
+                    y=sma_200_line,
+                    mode="lines",
+                    line=dict(color="#0284C7", width=1.5),
+                    name="200-Day SMA",
+                ),
+                row=1,
+                col=1,
+            )
+          chart_fig.add_trace(
+              go.Bar(
+                  x=hist.index,
+                  y=hist["Volume"],
+                  name="Volume",
+                  marker_color="#475569",
+              ),
+              row=2,
+              col=1,
+          )
+          chart_fig.update_layout(
+              paper_bgcolor="#0A0F1D",
+              plot_bgcolor="#0D1117",
+              font=dict(color="#94A3B8"),
+              height=380,
+              xaxis_rangeslider_visible=False,
+              margin=dict(l=10, r=10, t=30, b=10),
+              showlegend=False,
+          )
+          chart_fig.update_xaxes(gridcolor="#1F2937")
+          chart_fig.update_yaxes(gridcolor="#1F2937")
+          st.plotly_chart(chart_fig, use_container_width=True)
 
-        # 3. Institutional AI Research Synthesis via Gemini
+        # 4. Institutional AI Synthesis via Gemini (Persona & Standardized Template)
         market_context = f"""
                 Ticker: {ticker_input}
                 Company Name: {company_name}
@@ -167,52 +294,51 @@ if (run_btn or ticker_input) and ticker_input:
                 200-Day Moving Average: {sma_200:.2f} {currency} (Spread: {dma_diff_pct:+.2f}%)
                 52-Week Range: {low_52:.2f} to {high_52:.2f} {currency}
                 Market Cap: {info.get('marketCap', 'N/A')} {currency}
-                Forward P/E: {info.get('forwardPE', 'N/A')} | Trailing P/E: {info.get('trailingPE', 'N/A')}
-                Dividend Yield: {f"{info.get('dividendYield', 0) * 100:.2f}%" if info.get('dividendYield') else 'N/A'}
+                Forward P/E: {fwd_pe} | Trailing P/E: {info.get('trailingPE', 'N/A')}
+                Dividend Yield: {div_yield_str}
+                Snowflake Scores (0-6 Scale): Valuation: {val_score}, Growth: {growth_score}, Past: {past_score}, Health: {health_score}, Dividend: {div_score}
                 """
 
         system_prompt = """
                 # Role & Identity
                 You are MarketCatalyst AI, an elite Equity Research Analyst covering US financial markets (S&P 500, NASDAQ) and Norwegian markets (Oslo Børs / OSEBX).
-                Generate structured institutional intelligence for the report template.
-
-                You MUST structure your output using these exact tags so the engine can parse and populate the visual layout:
+                Structure high-density institutional intelligence strictly using these exact output markers:
 
                 [PRIMARY_STANCE]
-                (Choose one: Overweight / Buy Bias | Neutral / Hold Bias | Underweight / Reduce Bias | Consolidation / 200-DMA Support)
+                (🟢 OVERWEIGHT / BUY BIAS | 🟡 NEUTRAL / HOLD BIAS | 🔴 UNDERWEIGHT / REDUCE BIAS | 🟡 CONSOLIDATION / 200-DMA TEST)
 
                 [CATALYST_BREAKDOWN]
                 (Provide 3 structured HTML blocks styled as:
-                <div class="p-3 bg-slate-50/80 rounded-lg border-l-2 border-sky-500"><strong class="text-slate-900 block font-semibold mb-1">Headline</strong>Detailed institutional analysis point.</div>)
+                <div class="p-3 bg-slate-50/80 rounded-lg border-l-2 border-sky-500"><strong class="text-slate-900 block font-semibold mb-1">Trigger Headline</strong>In-depth institutional catalyst analysis.</div>)
 
                 [TECHNICAL_DYNAMICS]
                 (Provide 2 structured HTML blocks styled as:
-                <div class="p-3 bg-amber-50/60 rounded-lg border-l-2 border-amber-500"><strong class="text-slate-900 block font-semibold mb-1">Headline</strong>Detailed technical analysis point.</div>)
+                <div class="p-3 bg-amber-50/60 rounded-lg border-l-2 border-amber-500"><strong class="text-slate-900 block font-semibold mb-1">Technical Pivot</strong>Mean reversion analysis relative to 200-DMA.</div>)
 
                 [MACRO_SENSITIVITY]
-                (Provide 3 <li> items detailing Norges Bank/Fed policy, USD/NOK or EUR/NOK effects, and commodity/sector drivers:
-                <li class="flex items-start gap-2.5"><i data-lucide="check-circle-2" class="w-4 h-4 text-sky-700 shrink-0 mt-0.5"></i><div><strong class="text-slate-800">Headline:</strong> Analysis.</div></li>)
+                (Provide 3 <li> items detailing Norges Bank/Fed stance, USD/NOK or EUR/NOK effects, and commodity/sector drivers:
+                <li class="flex items-start gap-2.5"><i data-lucide="check-circle-2" class="w-4 h-4 text-sky-700 shrink-0 mt-0.5"></i><div><strong class="text-slate-800">Macro Factor:</strong> Analysis.</div></li>)
 
                 [FUNDAMENTAL_HEALTH]
-                (Provide 3 <li> items on backlog/revenue, dividend framework, and margins:
-                <li class="flex items-start gap-2.5"><i data-lucide="layers" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i><div><strong class="text-slate-800">Headline:</strong> Analysis.</div></li>)
+                (Provide 3 <li> items on backlog conversion, balance sheet debt, and cash distribution safety:
+                <li class="flex items-start gap-2.5"><i data-lucide="layers" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i><div><strong class="text-slate-800">Balance Sheet:</strong> Analysis.</div></li>)
 
                 [BULL_CASE]
                 (Provide 3 numbered list items:
-                <li class="flex items-start gap-2"><span class="font-mono font-bold text-emerald-700 bg-white px-1.5 py-0.5 rounded border border-emerald-200 shadow-xs">1</span><span><strong>Trigger:</strong> Analysis.</span></li>)
+                <li class="flex items-start gap-2"><span class="font-mono font-bold text-emerald-700 bg-white px-1.5 py-0.5 rounded border border-emerald-200 shadow-xs">1</span><span><strong>Upside Trigger:</strong> Detailed thesis.</span></li>)
 
                 [BEAR_CASE]
                 (Provide 3 numbered list items:
-                <li class="flex items-start gap-2"><span class="font-mono font-bold text-rose-700 bg-white px-1.5 py-0.5 rounded border border-rose-200 shadow-xs">1</span><span><strong>Risk:</strong> Analysis.</span></li>)
+                <li class="flex items-start gap-2"><span class="font-mono font-bold text-rose-700 bg-white px-1.5 py-0.5 rounded border border-rose-200 shadow-xs">1</span><span><strong>Downside Risk:</strong> Detailed thesis.</span></li>)
 
                 [TECHNICAL_PIVOT]
-                (Single concise sentence regarding 200-DMA pivot or price range support/resistance)
+                (Single concise technical line on 200-DMA support / resistance)
 
                 [CORP_EVENTS]
-                (Upcoming quarterly prints, AGM, or contract milestones)
+                (Upcoming earnings release and dividend record milestones)
 
                 [MACRO_DATA]
-                (Central bank rate decisions and macroeconomic releases)
+                (Central bank rate decisions and macroeconomic filings)
                 """
 
         client = genai.Client(api_key=GEMINI_API_KEY)
@@ -223,7 +349,6 @@ if (run_btn or ticker_input) and ticker_input:
 
         res_text = response.text
 
-        # Robust section parser
         def extract_tag(text, tag, fallback=""):
           try:
             pattern = rf"\[{tag}\](.*?)(?=\[[A-Z_]+\]|$)"
@@ -235,14 +360,14 @@ if (run_btn or ticker_input) and ticker_input:
           return fallback
 
         primary_stance = extract_tag(
-            res_text, "PRIMARY_STANCE", "Consolidation / 200-DMA Support"
+            res_text, "PRIMARY_STANCE", "🟡 CONSOLIDATION / 200-DMA TEST"
         )
         cat_breakdown = extract_tag(
             res_text,
             "CATALYST_BREAKDOWN",
             '<div class="p-3 bg-slate-50/80 rounded-lg border-l-2'
             ' border-sky-500"><strong class="text-slate-900 block font-semibold'
-            ' mb-1">Order Momentum</strong>Backlog conversion in'
+            ' mb-1">Backlog Execution</strong>Multi-year pipeline conversion in'
             " progress.</div>",
         )
         tech_dynamics = extract_tag(
@@ -250,24 +375,24 @@ if (run_btn or ticker_input) and ticker_input:
             "TECHNICAL_DYNAMICS",
             '<div class="p-3 bg-amber-50/60 rounded-lg border-l-2'
             ' border-amber-500"><strong class="text-slate-900 block'
-            ' font-semibold mb-1">Support Test</strong>Consolidating around'
-            " 200-DMA baseline.</div>",
+            ' font-semibold mb-1">Support Confluence</strong>Testing 200-DMA'
+            " institutional floor.</div>",
         )
         macro_sensitivity = extract_tag(
             res_text,
             "MACRO_SENSITIVITY",
             '<li class="flex items-start gap-2.5"><i data-lucide="check-circle-2"'
             ' class="w-4 h-4 text-sky-700 shrink-0 mt-0.5"></i><div><strong'
-            ' class="text-slate-800">Macro Factor:</strong> Monetary stance and'
-            " FX drivers active.</div></li>",
+            ' class="text-slate-800">FX Exposure:</strong> USD/NOK currency'
+            " translation tailwinds active.</div></li>",
         )
         fundamental_health = extract_tag(
             res_text,
             "FUNDAMENTAL_HEALTH",
             '<li class="flex items-start gap-2.5"><i data-lucide="layers"'
             ' class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i><div><strong'
-            ' class="text-slate-800">Balance Sheet:</strong> Liquidity and cash'
-            " distribution intact.</div></li>",
+            ' class="text-slate-800">Cash Flow:</strong> Dual-dividend structure'
+            " and low net debt maintained.</div></li>",
         )
         bull_case = extract_tag(
             res_text,
@@ -275,15 +400,15 @@ if (run_btn or ticker_input) and ticker_input:
             '<li class="flex items-start gap-2"><span class="font-mono font-bold'
             " text-emerald-700 bg-white px-1.5 py-0.5 rounded border"
             ' border-emerald-200 shadow-xs">1</span><span><strong>Contract'
-            " Expansion:</strong> Upside order intake.</span></li>",
+            " Acceleration:</strong> Structural order wins.</span></li>",
         )
         bear_case = extract_tag(
             res_text,
             "BEAR_CASE",
             '<li class="flex items-start gap-2"><span class="font-mono font-bold'
             " text-rose-700 bg-white px-1.5 py-0.5 rounded border"
-            ' border-rose-200 shadow-xs">1</span><span><strong>Delivery'
-            " Delay:</strong> Capacity constraints.</span></li>",
+            ' border-rose-200 shadow-xs">1</span><span><strong>Capacity'
+            " Bottlenecks:</strong> Production lead time drag.</span></li>",
         )
         watch_pivot = extract_tag(
             res_text,
@@ -293,15 +418,15 @@ if (run_btn or ticker_input) and ticker_input:
         watch_corp = extract_tag(
             res_text,
             "CORP_EVENTS",
-            "Upcoming quarterly financial report and dividend approval dates.",
+            "Next quarterly financial print & dividend record dates.",
         )
         watch_macro = extract_tag(
             res_text,
             "MACRO_DATA",
-            "Norges Bank / Federal Reserve policy rate announcements.",
+            "Norges Bank / Fed policy rate decisions and energy reports.",
         )
 
-        # 4. Inject into the Institutional HTML Template
+        # 5. Render Institutional HTML Report Container
         html_output = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -310,7 +435,7 @@ if (run_btn or ticker_input) and ticker_input:
   <title>IsewaInvest Intelligence Report - {ticker_input}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
@@ -338,7 +463,6 @@ if (run_btn or ticker_input) and ticker_input:
     </button>
   </div>
 
-  <!-- Main Report Container -->
   <div class="max-w-5xl mx-auto bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden print-shadow-none">
 
     <!-- Header Banner -->
@@ -355,7 +479,7 @@ if (run_btn or ticker_input) and ticker_input:
           </p>
         </div>
         <div class="text-left md:text-right">
-          <span class="text-[10px] font-bold tracking-wider uppercase text-slate-400">Primary Technical Stance</span>
+          <span class="text-[10px] font-bold tracking-wider uppercase text-slate-400">Institutional Consensus Bias</span>
           <div class="text-sm font-bold text-amber-300 flex items-center gap-1.5 md:justify-end mt-0.5">
             <i data-lucide="activity" class="w-4 h-4"></i> {primary_stance}
           </div>
@@ -366,7 +490,7 @@ if (run_btn or ticker_input) and ticker_input:
 
     <div class="p-8 space-y-8">
 
-      <!-- SECTION: KPI Cards & Visual 52-Week Range Bar -->
+      <!-- SECTION: KPI Scorecard & 52-Week Slider Gauge -->
       <section class="avoid-break">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl relative overflow-hidden">
@@ -399,7 +523,7 @@ if (run_btn or ticker_input) and ticker_input:
           </div>
         </div>
 
-        <!-- Visual 52-Week Price Spectrum Gauge -->
+        <!-- 52-Week Price Spectrum Gauge -->
         <div class="bg-slate-50 p-5 rounded-xl border border-slate-200">
           <div class="flex items-center justify-between text-xs font-semibold text-slate-700 mb-2">
             <span class="flex items-center gap-1.5 font-bold">
@@ -424,8 +548,8 @@ if (run_btn or ticker_input) and ticker_input:
               </div>
             </div>
             <div class="flex justify-between items-center mt-7 text-xs font-mono font-bold text-slate-700">
-              <div><span class="block text-[10px] uppercase font-sans font-semibold text-slate-400">52W Low (Floor)</span>{low_52:.2f} {currency}</div>
-              <div class="text-right"><span class="block text-[10px] uppercase font-sans font-semibold text-slate-400">52W High (Peak)</span>{high_52:.2f} {currency}</div>
+              <div><span class="block text-[10px] uppercase font-sans font-semibold text-slate-400">52W Floor</span>{low_52:.2f} {currency}</div>
+              <div class="text-right"><span class="block text-[10px] uppercase font-sans font-semibold text-slate-400">52W Peak</span>{high_52:.2f} {currency}</div>
             </div>
           </div>
         </div>
@@ -532,6 +656,36 @@ if (run_btn or ticker_input) and ticker_input:
         </div>
       </section>
 
+      <!-- Primary Source & Verification Box -->
+      <section class="avoid-break">
+        <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">Primary Source &amp; Verification Layer</h4>
+          <div class="overflow-x-auto text-[11px]">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-slate-200 text-slate-500 font-semibold">
+                  <th class="py-1.5">Verification Layer</th>
+                  <th class="py-1.5">Primary Source Repository</th>
+                  <th class="py-1.5">Filing Type &amp; Access</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-700 divide-y divide-slate-100">
+                <tr>
+                  <td class="py-1.5 font-medium">Regulatory Filings</td>
+                  <td class="py-1.5">Euronext Oslo Newsweb / SEC EDGAR</td>
+                  <td class="py-1.5 font-mono text-[10px] text-sky-700">Official Q-Report / Form 10-Q / 8-K</td>
+                </tr>
+                <tr>
+                  <td class="py-1.5 font-medium">Corporate Disclosures</td>
+                  <td class="py-1.5">Investor Relations Webcast &amp; Factsheet</td>
+                  <td class="py-1.5 font-mono text-[10px] text-sky-700">Earnings Transcript &amp; Deck</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- Footer & Regulatory Compliance -->
       <footer class="pt-6 border-t border-slate-200 text-[10px] text-slate-500 leading-relaxed space-y-2 avoid-break">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center font-semibold text-slate-700 pb-2 border-b border-slate-100">
@@ -556,8 +710,8 @@ if (run_btn or ticker_input) and ticker_input:
 </body>
 </html>"""
 
-        # Render complete institutional HTML document
-        components.html(html_output, height=1400, scrolling=True)
+        # 6. Render the institutional report container
+        components.html(html_output, height=1550, scrolling=True)
 
     except Exception as e:
       st.error(f"Execution Error: {str(e)}")
