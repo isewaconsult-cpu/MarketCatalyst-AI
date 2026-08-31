@@ -37,6 +37,9 @@ st.markdown(
         border-radius: 12px;
         padding: 20px;
     }
+    div[data-baseweb="select"] {
+        background-color: #161B22;
+    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -74,24 +77,93 @@ with col_title:
       unsafe_allow_html=True,
   )
 
+# -------------------------------------------------------------
+# MARKET DIRECTORY & TICKER HIERARCHY
+# -------------------------------------------------------------
+MARKET_REGISTRY = {
+    "Norway 🇳🇴": {
+        "Oslo Børs (OSEBX) - Energy & Offshore": {
+            "EQNR.OL": "Equinor ASA (EQNR.OL)",
+            "AKRBP.OL": "Aker BP ASA (AKRBP.OL)",
+            "VAR.OL": "Vår Energi ASA (VAR.OL)",
+            "FRO.OL": "Frontline PLC (FRO.OL)",
+            "HAFNI.OL": "Hafnia Ltd (HAFNI.OL)",
+            "BWLPG.OL": "BW LPG Ltd (BWLPG.OL)",
+            "SUBC.OL": "Subsea 7 SA (SUBC.OL)",
+        },
+        "Oslo Børs (OSEBX) - Defense & Industrials": {
+            "KOG.OL": "Kongsberg Gruppen ASA (KOG.OL)",
+            "TOM.OL": "Tomra Systems ASA (TOM.OL)",
+            "YAR.OL": "Yara International ASA (YAR.OL)",
+            "NHY.OL": "Norsk Hydro ASA (NHY.OL)",
+            "ORK.OL": "Orkla ASA (ORK.OL)",
+        },
+        "Oslo Børs (OSEBX) - Seafood & Marine": {
+            "MOWI.OL": "Mowi ASA (MOWI.OL)",
+            "SALM.OL": "SalMar ASA (SALM.OL)",
+            "LSG.OL": "Lerøy Seafood Group ASA (LSG.OL)",
+            "BAKKA.OL": "Bakkafrost P/F (BAKKA.OL)",
+            "GSF.OL": "Grieg Seafood ASA (GSF.OL)",
+        },
+        "Oslo Børs (OSEBX) - Finance & Technology": {
+            "DNB.OL": "DNB Bank ASA (DNB.OL)",
+            "TEL.OL": "Telenor ASA (TEL.OL)",
+            "NOD.OL": "Nordic Semiconductor ASA (NOD.OL)",
+            "AUTO.OL": "AutoStore Holdings Ltd (AUTO.OL)",
+            "SCHA.OL": "Schibsted ASA Class A (SCHA.OL)",
+        },
+    },
+    "United States 🇺🇸": {
+        "NASDAQ - Mega-Cap Technology": {
+            "NVDA": "NVIDIA Corporation (NVDA)",
+            "AAPL": "Apple Inc. (AAPL)",
+            "MSFT": "Microsoft Corporation (MSFT)",
+            "GOOGL": "Alphabet Inc. (GOOGL)",
+            "AMZN": "Amazon.com, Inc. (AMZN)",
+            "META": "Meta Platforms, Inc. (META)",
+            "TSLA": "Tesla, Inc. (TSLA)",
+            "AVGO": "Broadcom Inc. (AVGO)",
+            "AMD": "Advanced Micro Devices, Inc. (AMD)",
+        },
+        "NYSE - Aerospace & Defense": {
+            "LMT": "Lockheed Martin Corp. (LMT)",
+            "RTX": "RTX Corporation (RTX)",
+            "NOC": "Northrop Grumman Corp. (NOC)",
+            "GD": "General Dynamics Corp. (GD)",
+            "BA": "The Boeing Company (BA)",
+        },
+        "NYSE - Energy & Financials": {
+            "XOM": "Exxon Mobil Corp. (XOM)",
+            "CVX": "Chevron Corporation (CVX)",
+            "SLB": "SLB / Schlumberger (SLB)",
+            "JPM": "JPMorgan Chase & Co. (JPM)",
+            "BAC": "Bank of America Corp. (BAC)",
+            "GS": "The Goldman Sachs Group (GS)",
+            "MS": "Morgan Stanley (MS)",
+        },
+        "US Broad Market - Industrials & Healthcare": {
+            "CAT": "Caterpillar Inc. (CAT)",
+            "UNH": "UnitedHealth Group Inc. (UNH)",
+            "LLY": "Eli Lilly and Company (LLY)",
+            "JNJ": "Johnson & Johnson (JNJ)",
+            "GE": "GE Aerospace (GE)",
+        },
+    },
+}
+
 
 def build_arrow_gauge(score, label_text):
   """Builds a semi-circular speedometer with a tapered arrow calibration needle."""
   score = max(1.0, min(5.0, float(score)))
-
-  # Map score (1 to 5) to angle (180 deg down to 0 deg)
   theta_deg = 180.0 - ((score - 1.0) / 4.0) * 180.0
   theta_rad = math.radians(theta_deg)
 
-  # Anchor coordinates
   cx, cy = 0.5, 0.12
-  r = 0.38  # Arrow length
+  r = 0.38
 
-  # Arrow Tip
   nx = cx + r * math.cos(theta_rad)
   ny = cy + r * math.sin(theta_rad)
 
-  # Perpendicular Base coordinates for tapered arrow body
   b_rad = math.radians(theta_deg + 90)
   bw = 0.02
   bx1 = cx + bw * math.cos(b_rad)
@@ -102,8 +174,6 @@ def build_arrow_gauge(score, label_text):
   arrow_path = f"M {bx1} {by1} L {nx} {ny} L {bx2} {by2} Z"
 
   fig = go.Figure()
-
-  # Background Calibrated Arc
   fig.add_trace(
       go.Indicator(
           mode="gauge",
@@ -136,7 +206,6 @@ def build_arrow_gauge(score, label_text):
       )
   )
 
-  # Tapered Arrow Needle
   fig.add_shape(
       type="path",
       path=arrow_path,
@@ -145,8 +214,6 @@ def build_arrow_gauge(score, label_text):
       xref="paper",
       yref="paper",
   )
-
-  # Central Cap Pivot
   fig.add_shape(
       type="circle",
       x0=cx - 0.028,
@@ -158,8 +225,6 @@ def build_arrow_gauge(score, label_text):
       xref="paper",
       yref="paper",
   )
-
-  # Stance Label
   fig.add_annotation(
       x=0.5,
       y=0.0,
@@ -169,7 +234,6 @@ def build_arrow_gauge(score, label_text):
       xref="paper",
       yref="paper",
   )
-
   fig.update_layout(
       paper_bgcolor="#0A0F1D",
       height=230,
@@ -178,25 +242,50 @@ def build_arrow_gauge(score, label_text):
   return fig
 
 
-# Input Form Container
-with st.form(key="terminal_search_form", clear_on_submit=False):
-  col1, col2 = st.columns([4, 1])
-  with col1:
-    ticker_input = (
-        st.text_input(
-            "Enter Ticker Symbol:",
-            value="KOG.OL",
-            placeholder="e.g., EQNR.OL, KOG.OL, VAR.OL, NVDA, TSLA",
-        )
-        .strip()
-        .upper()
-    )
-  with col2:
-    st.write("")
-    st.write("")
-    run_btn = st.form_submit_button(
-        "⚡ Analyze Equity", use_container_width=True
-    )
+# -------------------------------------------------------------
+# CASCADING SELECTION UI
+# -------------------------------------------------------------
+st.markdown("### 🌐 Select Market & Asset Coverage")
+
+sel_col1, sel_col2, sel_col3 = st.columns(3)
+
+with sel_col1:
+  selected_country = st.selectbox(
+      "1. Select Country:", list(MARKET_REGISTRY.keys()), index=0
+  )
+
+with sel_col2:
+  available_markets = list(MARKET_REGISTRY[selected_country].keys())
+  selected_market = st.selectbox(
+      "2. Select Exchange / Segment:", available_markets, index=1
+  )
+
+with sel_col3:
+  tickers_dict = MARKET_REGISTRY[selected_country][selected_market]
+  ticker_options = list(tickers_dict.keys()) + ["Custom Ticker Entry..."]
+  selected_ticker_option = st.selectbox(
+      "3. Select Listed Equity:",
+      ticker_options,
+      index=0,
+      format_func=lambda x: tickers_dict.get(
+          x, "✏️ Custom Ticker (Type Manually)"
+      ),
+  )
+
+# Custom ticker override or direct dropdown assignment
+if selected_ticker_option == "Custom Ticker Entry...":
+  ticker_input = (
+      st.text_input(
+          "Enter Custom Ticker Symbol:",
+          placeholder="e.g., AKRBP.OL, FRO.OL, PLTR, MSFT",
+      )
+      .strip()
+      .upper()
+  )
+else:
+  ticker_input = selected_ticker_option
+
+run_btn = st.button("⚡ Analyze Equity", use_container_width=True)
 
 if ticker_input:
   if "current_ticker" not in st.session_state:
@@ -209,7 +298,7 @@ if ticker_input:
     st.session_state.current_ticker = ticker_input
     st.session_state.report_generated = False
 
-  # 1. Fetch Market & Fundamental Telemetry
+  # Ingest Market Data
   stock = yf.Ticker(ticker_input)
   info = stock.info or {}
   hist_1y = stock.history(period="1y")
@@ -289,7 +378,7 @@ if ticker_input:
     # SECTION 1: DYNAMIC TIMEFRAME CANDLESTICK ENGINE
     # -------------------------------------------------------------
     st.markdown(
-        "<h3 style='color:#F3BA2F; margin-top:15px;'>📈 Dynamic Price Action"
+        "<h3 style='color:#F3BA2F; margin-top:20px;'>📈 Dynamic Price Action"
         " Telemetry</h3>",
         unsafe_allow_html=True,
     )
@@ -389,12 +478,10 @@ if ticker_input:
     m_col1, m_col2 = st.columns([1, 1.4])
 
     with m_col1:
-      # Render Arrow Needle Gauge
       st.plotly_chart(
           build_arrow_gauge(dial_score, rec_label), use_container_width=True
       )
 
-      # Sourced Breakdown
       p_sb = 62 if "BUY" in rec_label else 20
       p_b = 18 if "BUY" in rec_label else 25
       p_h = 15 if "HOLD" in rec_label else 35
@@ -526,7 +613,7 @@ if ticker_input:
       st.plotly_chart(cone_fig, use_container_width=True)
 
     # -------------------------------------------------------------
-    # SECTION 3: INSTITUTIONAL RESEARCH REPORT GENERATION (GEMINI)
+    # SECTION 3: INSTITUTIONAL RESEARCH REPORT (GEMINI)
     # -------------------------------------------------------------
     if not st.session_state.get("report_generated", False):
       with st.spinner(
@@ -895,7 +982,7 @@ if ticker_input:
   <script>lucide.createIcons();</script>
 </body>
 </html>"""
-        st.session_state.report_generated = True
+        st.session_state.report_html = True
 
     if "report_html" in st.session_state:
       components.html(st.session_state.report_html, height=1400, scrolling=True)
