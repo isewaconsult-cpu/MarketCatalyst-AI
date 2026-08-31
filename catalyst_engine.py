@@ -17,6 +17,15 @@ if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
   print("[-] Error: Telegram secrets are missing.")
   sys.exit(1)
 
+# Institutional Compliance & Disclaimer Footer
+DISCLAIMER_FOOTER = (
+    "\n\n---\n"
+    "⚖️ [Important Information & Research"
+    " Disclaimer](https://isewainvest.streamlit.app)\n"
+    "_Research for informational & educational purposes only — not personalized"
+    " investment advice._"
+)
+
 
 def send_telegram_alert(message: str):
   """Dispatches message to Telegram with Markdown fallback to plain text."""
@@ -25,9 +34,9 @@ def send_telegram_alert(message: str):
       "chat_id": TELEGRAM_CHAT_ID,
       "text": message,
       "parse_mode": "Markdown",
+      "disable_web_page_preview": True,
   }
   res = requests.post(url, json=payload, timeout=20)
-  # If Markdown parsing fails due to unescaped characters, send as plain text
   if res.status_code != 200:
     print(
         f"[!] Telegram Markdown dispatch warning ({res.status_code}). Retrying"
@@ -108,13 +117,14 @@ Structure:
 * **Fundamental & Balance Sheet:** Dividend coverage metrics and capex discipline.
 * **Actionable Watchpoints:** Key technical levels for KOG.OL and EQNR.OL.
 
-Strict limit: 220 words. Format with bullet points and bold headers.
+Strict limit: 200 words. Format with clean bullet points and bold headers.
 """
 
 print("[+] Synthesizing Oslobørs report...")
 report_oslo = generate_synthesis(client, prompt_oslo)
-send_telegram_alert(report_oslo)
-print("[+] Message 1 ([Oslobørs]) successfully dispatched.")
+full_oslo_message = report_oslo.strip() + DISCLAIMER_FOOTER
+send_telegram_alert(full_oslo_message)
+print("[+] Message 1 ([Oslobørs]) with compliance footer dispatched.")
 
 # =========================================================
 # MESSAGE 2: ISEWAINTERNATIONAL (US, APAC & India Energy)
@@ -138,10 +148,13 @@ Structure:
   - ASX & Nikkei opening/closing tone on raw energy commodities.
   - Indian downstream vs. upstream dynamics (ONGC upstream crude margin expansion vs. Reliance/IOC refining margins).
 
-Strict limit: 250 words. Format with bullet points and bold headers.
+Strict limit: 220 words. Format with clean bullet points and bold headers.
 """
 
 print("[+] Synthesizing IsewaInternational report...")
 report_intl = generate_synthesis(client, prompt_intl)
-send_telegram_alert(report_intl)
-print("[+] Message 2 ([IsewaInternational]) successfully dispatched.")
+full_intl_message = report_intl.strip() + DISCLAIMER_FOOTER
+send_telegram_alert(full_intl_message)
+print(
+    "[+] Message 2 ([IsewaInternational]) with compliance footer dispatched."
+)
