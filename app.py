@@ -17,7 +17,7 @@ GEMINI_API_KEY = st.secrets.get(
 ).strip()
 
 st.set_page_config(
-    page_title="IsewaInvest | Institutional Equity Terminal",
+    page_title="Iserve | Institutional Equity Terminal",
     page_icon="🏛️",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -42,43 +42,68 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Logo Discovery Helper
+logo_path = None
+for candidate in [
+    "iserve_logo.png",
+    "Gemini_Generated_Image_vo6bw6vo6bw6vo6b - Edited.png",
+    "Isewa Invest (1).png",
+]:
+  if os.path.exists(candidate):
+    logo_path = candidate
+    break
+
 # App Header
 col_logo, col_title = st.columns([1, 6])
 with col_logo:
-  if os.path.exists("Isewa Invest (1).png"):
-    st.image("Isewa Invest (1).png", width=95)
-  elif os.path.exists("isewa_logo.png"):
-    st.image("isewa_logo.png", width=95)
+  if logo_path:
+    st.image(logo_path, width=95)
   else:
     st.markdown("## 🏛️")
 
 with col_title:
   st.markdown(
-      "<h1 style='color:#F3BA2F; margin-bottom:0px; font-weight:800;'>IsewaInvest"
+      "<h1 style='color:#F3BA2F; margin-bottom:0px; font-weight:800;'>Iserve"
       " Intelligence Terminal</h1>",
       unsafe_allow_html=True,
   )
   st.markdown(
-      "<p style='color:#94A3B8; font-size:13px; margin-top:2px;'>Institutional"
-      " Equity Research & Dynamic Telemetry &bull; Oslo Børs (OSEBX) &amp; US"
-      " Equities</p>",
+      "<p style='color:#94A3B8; font-size:13px; margin-top:2px;'>We Serve, You"
+      " Prosper &bull; Institutional Equity Research &amp; Consensus"
+      " Intelligence</p>",
       unsafe_allow_html=True,
   )
 
 
-def build_needle_gauge(score, label_text):
-  """Builds a semi-circular speedometer with an authentic physical needle pointer."""
+def build_arrow_gauge(score, label_text):
+  """Builds a semi-circular speedometer with a tapered arrow calibration needle."""
   score = max(1.0, min(5.0, float(score)))
+
+  # Map score (1 to 5) to angle (180 deg down to 0 deg)
   theta_deg = 180.0 - ((score - 1.0) / 4.0) * 180.0
   theta_rad = math.radians(theta_deg)
 
-  cx, cy = 0.5, 0.15
-  r = 0.35
+  # Anchor coordinates
+  cx, cy = 0.5, 0.12
+  r = 0.38  # Arrow length
+
+  # Arrow Tip
   nx = cx + r * math.cos(theta_rad)
   ny = cy + r * math.sin(theta_rad)
 
+  # Perpendicular Base coordinates for tapered arrow body
+  b_rad = math.radians(theta_deg + 90)
+  bw = 0.02
+  bx1 = cx + bw * math.cos(b_rad)
+  by1 = cy + bw * math.sin(b_rad)
+  bx2 = cx - bw * math.cos(b_rad)
+  by2 = cy - bw * math.sin(b_rad)
+
+  arrow_path = f"M {bx1} {by1} L {nx} {ny} L {bx2} {by2} Z"
+
   fig = go.Figure()
 
+  # Background Calibrated Arc
   fig.add_trace(
       go.Indicator(
           mode="gauge",
@@ -111,41 +136,43 @@ def build_needle_gauge(score, label_text):
       )
   )
 
+  # Tapered Arrow Needle
   fig.add_shape(
-      type="line",
-      x0=cx,
-      y0=cy,
-      x1=nx,
-      y1=ny,
-      line=dict(color="#00F5D4", width=4),
-      xref="paper",
-      yref="paper",
-  )
-  fig.add_shape(
-      type="circle",
-      x0=cx - 0.03,
-      y0=cy - 0.03,
-      x1=cx + 0.03,
-      y1=cy + 0.03,
-      fillcolor="#FFFFFF",
-      line=dict(color="#00F5D4", width=2),
+      type="path",
+      path=arrow_path,
+      fillcolor="#00F5D4",
+      line=dict(color="#FFFFFF", width=1),
       xref="paper",
       yref="paper",
   )
 
+  # Central Cap Pivot
+  fig.add_shape(
+      type="circle",
+      x0=cx - 0.028,
+      y0=cy - 0.028,
+      x1=cx + 0.028,
+      y1=cy + 0.028,
+      fillcolor="#F3BA2F",
+      line=dict(color="#0A0F1D", width=2),
+      xref="paper",
+      yref="paper",
+  )
+
+  # Stance Label
   fig.add_annotation(
       x=0.5,
-      y=0.02,
+      y=0.0,
       text=f"<b>{label_text}</b>",
       showarrow=False,
-      font=dict(size=18, color="#FFFFFF", family="Inter"),
+      font=dict(size=18, color="#F3BA2F", family="Inter"),
       xref="paper",
       yref="paper",
   )
 
   fig.update_layout(
       paper_bgcolor="#0A0F1D",
-      height=220,
+      height=230,
       margin=dict(l=20, r=20, t=20, b=10),
   )
   return fig
@@ -362,10 +389,12 @@ if ticker_input:
     m_col1, m_col2 = st.columns([1, 1.4])
 
     with m_col1:
+      # Render Arrow Needle Gauge
       st.plotly_chart(
-          build_needle_gauge(dial_score, rec_label), use_container_width=True
+          build_arrow_gauge(dial_score, rec_label), use_container_width=True
       )
 
+      # Sourced Breakdown
       p_sb = 62 if "BUY" in rec_label else 20
       p_b = 18 if "BUY" in rec_label else 25
       p_h = 15 if "HOLD" in rec_label else 35
@@ -418,7 +447,7 @@ if ticker_input:
                     </div>
                 </div>
                 <div style="margin-top:10px; font-size:9px; color:#64748B; border-top:1px solid #21262D; padding-top:6px;">
-                    Benchmarked via DNB Carnegie, Pareto, ABGSC, FactSet &amp; LSEG I/B/E/S consensus.
+                    Benchmarked via DNB Carnegie, Pareto, Arctic, ABGSC, FactSet &amp; LSEG I/B/E/S consensus.
                 </div>
             </div>
             """
@@ -678,7 +707,7 @@ if ticker_input:
   <div class="max-w-5xl mx-auto mb-4 flex justify-between items-center no-print">
     <div class="flex items-center gap-2 text-xs text-slate-500 font-medium">
       <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-      IsewaInvest Institutional Template Spec &bull; MAR Compliant v3.0
+      Iserve Institutional Research Spec &bull; MAR Compliant v3.0
     </div>
     <button onclick="window.print()" class="inline-flex items-center gap-2 bg-[#0B192C] hover:bg-slate-800 text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow transition">
       <i data-lucide="printer" class="w-4 h-4"></i> Export / Print Institutional PDF
@@ -689,7 +718,7 @@ if ticker_input:
     <header class="bg-[#0B192C] text-white px-8 pt-7 pb-6 border-b-4 border-amber-500">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
         <div>
-          <span class="text-[11px] tracking-widest uppercase font-bold text-amber-400">Isewa AS &bull; Equity Research &amp; Market Intelligence</span>
+          <span class="text-[11px] tracking-widest uppercase font-bold text-amber-400">Iserve &bull; Equity Research &amp; Market Intelligence</span>
           <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
             {company_name}
             <span class="text-xs font-bold text-amber-300 bg-white/10 px-2.5 py-1 rounded border border-white/15 font-mono">{ticker_input}</span>
@@ -699,7 +728,7 @@ if ticker_input:
           </p>
         </div>
         <div class="text-left md:text-right">
-          <span class="text-[10px] font-bold tracking-wider uppercase text-slate-400">Institutional Stance</span>
+          <span class="text-[10px] font-bold tracking-wider uppercase text-slate-400">Institutional Consensus</span>
           <div class="text-sm font-bold text-amber-300 flex items-center gap-1.5 md:justify-end mt-0.5">
             <i data-lucide="activity" class="w-4 h-4"></i> {primary_stance}
           </div>
@@ -721,7 +750,7 @@ if ticker_input:
             <div class="absolute top-0 right-0 w-1.5 h-full bg-amber-500"></div>
             <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">200-Day Moving Avg</p>
             <div class="text-2xl font-black font-mono text-slate-800 mt-1">{sma_200:.2f} <span class="text-xs font-semibold text-slate-500">{currency}</span></div>
-            <p class="text-[11px] text-amber-600 font-semibold mt-1">Core Pivot</p>
+            <p class="text-[11px] text-amber-600 font-semibold mt-1">Core Trend Pivot</p>
           </div>
           <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl relative overflow-hidden">
             <div class="absolute top-0 right-0 w-1.5 h-full bg-emerald-500"></div>
@@ -742,7 +771,7 @@ if ticker_input:
             <span class="flex items-center gap-1.5 font-bold">
               <i data-lucide="sliders-horizontal" class="w-4 h-4 text-sky-700"></i> 52-Week Price Spectrum &amp; Support Position
             </span>
-            <span class="text-[11px] font-mono text-slate-500">Span: {price_range_span:.2f} {currency}</span>
+            <span class="text-[11px] font-mono text-slate-500">Trading Range Span: {price_range_span:.2f} {currency}</span>
           </div>
           <div class="relative pt-6 pb-2">
             <div class="h-3 w-full bg-gradient-to-r from-emerald-200 via-amber-200 to-rose-200 rounded-full relative">
@@ -852,13 +881,13 @@ if ticker_input:
       <footer class="pt-6 border-t border-slate-200 text-[10px] text-slate-500 leading-relaxed space-y-2 avoid-break">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center font-semibold text-slate-700 pb-2 border-b border-slate-100">
           <span class="flex items-center gap-1.5">
-            <strong class="text-slate-900">Isewa AS</strong> &bull; Independent Equity Research &amp; Market Intelligence
+            <strong class="text-slate-900">Iserve</strong> &bull; Independent Equity Research &amp; Market Intelligence
           </span>
           <span class="text-slate-500">Regulatory Framework: MAR / EEA Compliant</span>
         </div>
         <p><strong>Important Information &amp; Research Disclaimer:</strong> This document is prepared for informational and educational purposes only and does not constitute personalized investment advice, financial endorsement, or an offer to buy/sell securities. {ticker_input} market data as of timestamp.</p>
         <div class="text-center font-bold text-slate-400 pt-2 tracking-widest uppercase text-[9px]">
-          Research Informs. You Decide. &bull; Isewa AS &copy; 2026
+          We Serve, You Prosper &bull; Iserve &copy; 2026
         </div>
       </footer>
     </div>
