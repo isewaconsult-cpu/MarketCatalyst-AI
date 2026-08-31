@@ -9,10 +9,10 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 # ---------------------------------------------------------
-# 1. PAGE CONFIGURATION & SIMPLY WALL ST DARK THEME
+# 1. PAGE CONFIGURATION & INSTITUTIONAL THEME STYLING
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="MarketCatalyst AI | Dashboard",
+    page_title="MarketCatalyst AI | Institutional Intelligence & Social Feed",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -20,14 +20,13 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Dark Theme Core */
     .stApp {
         background-color: #0d1117;
         color: #c9d1d9;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     }
     
-    /* Global Ribbon */
+    /* Real-Time Market Ribbon */
     .ticker-ribbon {
         display: flex;
         align-items: center;
@@ -55,16 +54,6 @@ st.markdown("""
     .ticker-down { color: #f85149; font-weight: 600; }
 
     /* Top Navigation Header */
-    .sws-nav {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        background-color: #161b22;
-        padding: 10px 20px;
-        border-radius: 8px;
-        border: 1px solid #30363d;
-        margin-bottom: 20px;
-    }
     .sws-brand {
         font-size: 18px;
         font-weight: 800;
@@ -72,22 +61,6 @@ st.markdown("""
         display: flex;
         align-items: center;
         gap: 8px;
-        letter-spacing: -0.5px;
-    }
-    .sws-nav-links {
-        display: flex;
-        gap: 18px;
-        font-size: 13px;
-        font-weight: 600;
-    }
-    .sws-nav-links a {
-        color: #8b949e;
-        text-decoration: none;
-    }
-    .sws-nav-links a.active {
-        color: #58a6ff;
-        border-bottom: 2px solid #58a6ff;
-        padding-bottom: 4px;
     }
 
     /* Portfolio Cards */
@@ -109,14 +82,9 @@ st.markdown("""
         justify-content: center;
         height: 100%;
         color: #8b949e;
-        cursor: pointer;
-    }
-    .new-portfolio-card:hover {
-        border-color: #58a6ff;
-        color: #58a6ff;
     }
 
-    /* Smart Updates Feed Card */
+    /* News & Smart Updates Feed Card */
     .update-card {
         background-color: #161b22;
         border: 1px solid #30363d;
@@ -144,6 +112,15 @@ st.markdown("""
         font-weight: 600;
         font-family: monospace;
     }
+    .origin-badge {
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background-color: #21262d;
+        color: #58a6ff;
+        border: 1px solid #30363d;
+        margin-left: 6px;
+    }
     .update-body-title {
         font-size: 14px;
         font-weight: 600;
@@ -156,25 +133,61 @@ st.markdown("""
         line-height: 1.4;
     }
 
-    /* Right Column / Community Cards */
-    .community-card {
+    /* Social & Influencer Cards (X / Truth / Meta) */
+    .social-card {
         background-color: #161b22;
         border: 1px solid #30363d;
         border-radius: 8px;
-        padding: 16px;
-        margin-bottom: 16px;
+        padding: 14px;
+        margin-bottom: 14px;
     }
-    .badge-amber {
-        color: #d29922;
-        font-size: 11px;
+    .social-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    .social-author {
+        font-size: 13px;
         font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        color: #f0f6fc;
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
-    .author-meta {
-        font-size: 12px;
-        font-weight: 600;
+    .social-tag {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+        text-transform: uppercase;
+    }
+    .tag-x { background-color: #000000; color: #ffffff; border: 1px solid #30363d; }
+    .tag-truth { background-color: #7c2d12; color: #fed7aa; }
+    .tag-fed { background-color: #1e3a8a; color: #bfdbfe; }
+    .tag-meta { background-color: #064e3b; color: #a7f3d0; }
+    
+    .social-content {
+        font-size: 13px;
         color: #c9d1d9;
+        line-height: 1.4;
+        margin-bottom: 8px;
+    }
+    .social-metrics {
+        font-size: 11px;
+        color: #8b949e;
+        display: flex;
+        justify-content: space-between;
+        border-top: 1px solid #21262d;
+        padding-top: 6px;
+    }
+
+    /* Metric Cards */
+    .stMetric {
+        background-color: #131b2e !important;
+        border: 1px solid #1e293b !important;
+        padding: 14px !important;
+        border-radius: 8px !important;
     }
 
     /* Institutional Footer */
@@ -223,18 +236,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. SESSION STATE
+# 2. SESSION STATE & CLIENT INITIALIZATION
 # ---------------------------------------------------------
+if "user_country" not in st.session_state:
+    st.session_state.user_country = "🇳🇴 Norway (Oslo Børs / E24 / DN)"
+
+if "active_ticker" not in st.session_state:
+    st.session_state.active_ticker = "NVDA"
+
 if "portfolio" not in st.session_state:
     st.session_state.portfolio = [
         {"Ticker": "NVDA", "Company": "NVIDIA Corp", "Shares": 25, "Value": 5438.75, "Gain": "+184.2%"},
         {"Ticker": "EQNR.OL", "Company": "Equinor ASA", "Shares": 150, "Value": 43500.00, "Gain": "+12.8%"},
         {"Ticker": "META", "Company": "Meta Platforms", "Shares": 12, "Value": 6936.24, "Gain": "+64.5%"},
-        {"Ticker": "CRWD", "Company": "CrowdStrike", "Shares": 18, "Value": 3931.20, "Gain": "+21.4%"}
+        {"Ticker": "DNB.OL", "Company": "DNB Bank ASA", "Shares": 200, "Value": 42800.00, "Gain": "+18.4%"}
     ]
-
-if "active_ticker" not in st.session_state:
-    st.session_state.active_ticker = "NVDA"
 
 def get_gemini_client():
     api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
@@ -246,16 +262,9 @@ def get_gemini_client():
 @st.cache_data(ttl=60)
 def fetch_global_ribbon_data():
     indices = {
-        "NDX": "^NDX",
-        "COMP": "^IXIC",
-        "S&P 500": "^GSPC",
-        "SOX": "^SOX",
-        "OSEBX": "^OSEAX",
-        "OMXS30": "^OMX",
-        "OMXC25": "^OMXC25",
-        "OMXH25": "^OMXH25",
-        "DAX": "^GDAXI",
-        "FTSE 100": "^FTSE"
+        "NDX": "^NDX", "COMP": "^IXIC", "S&P 500": "^GSPC",
+        "SOX": "^SOX", "OSEBX": "^OSEAX", "OMXS30": "^OMX",
+        "OMXC25": "^OMXC25", "OMXH25": "^OMXH25", "DAX": "^GDAXI", "FTSE 100": "^FTSE"
     }
     ticker_data = []
     for label, sym in indices.items():
@@ -287,33 +296,73 @@ def render_market_ribbon():
             {"label": "FTSE 100", "val": 8470.60, "pct": -0.05},
         ]
     
-    items = []
-    for item in data:
-        arrow = "▲" if item["pct"] >= 0 else "▼"
-        cls = "ticker-up" if item["pct"] >= 0 else "ticker-down"
-        items.append(f'<div class="ticker-item"><span class="ticker-name">{item["label"]}</span><span class="ticker-val">{item["val"]:,.2f}</span><span class="{cls}">{item["pct"]:+.2f}% {arrow}</span></div>')
-    
-    html = f'<div class="ticker-ribbon">{"".join(items)}</div>'
-    st.markdown(html, unsafe_allow_html=True)
+    items = [
+        f'<div class="ticker-item"><span class="ticker-name">{item["label"]}</span><span class="ticker-val">{item["val"]:,.2f}</span><span class="{"ticker-up" if item["pct"] >= 0 else "ticker-down"}">{item["pct"]:+.2f}% {"▲" if item["pct"] >= 0 else "▼"}</span></div>'
+        for item in data
+    ]
+    st.markdown(f'<div class="ticker-ribbon">{"".join(items)}</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 4. SIMPLY WALL ST-STYLE SNOWFLAKE RADAR CHART
+# 4. INSTITUTIONAL BREAKDOWN MODAL DIALOG
+# ---------------------------------------------------------
+@st.dialog("⚡ Institutional Catalyst Breakdown & Event Intelligence", width="large")
+def render_institutional_modal(company_name, ticker, source_title, event_summary, origin_market):
+    st.markdown(f"### {company_name} (`{ticker}`)")
+    st.caption(f"Event Source: **{origin_market}** | Headline: *{source_title}*")
+    
+    with st.spinner("Compiling multi-source institutional synthesis..."):
+        client = get_gemini_client()
+        
+        system_instruction = """
+You are MarketCatalyst AI, an elite Equity Research Analyst and Financial Intelligence Specialist. Your domain expertise covers both US financial markets (S&P 500, NASDAQ, NYSE) and Norwegian/Nordic markets (Oslo Børs / OSEBX, Euronext). 
+
+Analyze the event strictly according to the 5-Step Key Analytical Framework:
+1. **Catalyst Breakdown:** Identify the core event, timing, and direct financial metrics.
+2. **Historical Context & Price Action:** Compare with previous historical beats/misses or guidance reactions.
+3. **Macro & Sector Drivers:** 
+   - If Norwegian/Nordic: OSEBX sentiment, Norges Bank policy rates, Brent crude pricing ($/bbl), USD/NOK and EUR/NOK effects.
+   - If US/Global: S&P 500/NASDAQ sentiment, Fed policy rate path, 10Y US Treasury yield, AI infrastructure capex cycles.
+4. **Fundamental & Dividend Health:** P/E valuation vs peer median, balance sheet durability, debt maturity, and dividend payout safety.
+5. **Scenario Synthesis:** Clear Bull and Bear valuation pathways, key risks, and specific dates/triggers to monitor.
+
+Maintain institutional rigor. Format with bold subheadings and concise bullet points. Never provide direct investment advice.
+"""
+
+        prompt = f"""
+Conduct an institutional catalyst breakdown:
+- Security: {ticker} ({company_name})
+- Market / News Origin: {origin_market}
+- Headline: {source_title}
+- Context Details: {event_summary}
+- User Location Context: Prioritize {st.session_state.user_country} macro linkages followed by US global benchmarks.
+"""
+
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.2,
+                ),
+            )
+            st.markdown(response.text)
+        except Exception as e:
+            st.error(f"Failed to generate intelligence telemetry: {str(e)}")
+
+# ---------------------------------------------------------
+# 5. SIMPLY WALL ST-STYLE SNOWFLAKE RADAR CHART
 # ---------------------------------------------------------
 def generate_snowflake_chart(info, hist):
     categories = ['Valuation', 'Future Growth', 'Past Performance', 'Financial Health', 'Dividend']
-    
     pe = info.get('trailingPE', 25) or 25
     valuation_score = max(1.0, min(6.0, 7.0 - (pe / 10.0)))
-    
     rev_growth = info.get('revenueGrowth', 0.08) or 0.08
     future_score = max(1.0, min(6.0, 1.5 + (rev_growth * 12.0)))
-    
     ret_52w = ((hist['Close'].iloc[-1] - hist['Close'].iloc[0]) / hist['Close'].iloc[0]) if len(hist) > 0 else 0.1
     past_score = max(1.0, min(6.0, 3.0 + (ret_52w * 4.0)))
-    
     debt_equity = (info.get('debtToEquity', 60) or 60) / 100.0
     health_score = max(1.0, min(6.0, 6.0 - debt_equity))
-    
     div_yield = (info.get('dividendYield', 0.0) or 0.0) * 100
     div_score = max(1.0, min(6.0, 1.0 + (div_yield * 1.5)))
     
@@ -344,25 +393,25 @@ def generate_snowflake_chart(info, hist):
     return fig
 
 # ---------------------------------------------------------
-# 5. GLOBAL MARKETS DICTIONARY WITH FLAGS
+# 6. GLOBAL COUNTRY & MARKET REGISTRY
 # ---------------------------------------------------------
 MARKETS = {
-    "🇺🇸 United States (S&P 500 / NASDAQ / NYSE)": {"default": "NVDA", "currency": "USD"},
-    "🇳🇴 Norway (Oslo Børs / Euronext OSEBX)": {"default": "EQNR.OL", "currency": "NOK"},
-    "🇸🇪 Sweden (Nasdaq Stockholm / OMXS30)": {"default": "VOLV-B.ST", "currency": "SEK"},
-    "🇩🇰 Denmark (Nasdaq Copenhagen / OMXC25)": {"default": "NOVO-B.CO", "currency": "DKK"},
-    "🇫🇮 Finland (Nasdaq Helsinki / OMXH25)": {"default": "NOKIA.HE", "currency": "EUR"},
-    "🇬🇧 United Kingdom (London Stock Exchange / FTSE 100)": {"default": "SHEL.L", "currency": "GBP"},
-    "🇩🇪 Germany (Deutsche Börse / DAX 40)": {"default": "SAP.DE", "currency": "EUR"},
+    "🇳🇴 Norway (Oslo Børs / E24 / DN)": {"default": "EQNR.OL", "currency": "NOK"},
+    "🇺🇸 United States (S&P 500 / NASDAQ / SEC)": {"default": "NVDA", "currency": "USD"},
+    "🇸🇪 Sweden (Nasdaq Stockholm / DI)": {"default": "VOLV-B.ST", "currency": "SEK"},
+    "🇩🇰 Denmark (Nasdaq Copenhagen / Børsen)": {"default": "NOVO-B.CO", "currency": "DKK"},
+    "🇫🇮 Finland (Nasdaq Helsinki / Kauppalehti)": {"default": "NOKIA.HE", "currency": "EUR"},
+    "🇬🇧 United Kingdom (LSE / Financial Times)": {"default": "SHEL.L", "currency": "GBP"},
+    "🇩🇪 Germany (DAX 40 / Handelsblatt)": {"default": "SAP.DE", "currency": "EUR"},
     "🇪🇺 Eurozone (Euronext Paris / Amsterdam)": {"default": "ASML.AS", "currency": "EUR"},
-    "🇯🇵 Japan (Tokyo Stock Exchange / Nikkei 225)": {"default": "7203.T", "currency": "JPY"},
-    "🇨🇦 Canada (Toronto Stock Exchange / TSX)": {"default": "SHOP.TO", "currency": "CAD"},
-    "🇦🇺 Australia (Australian Securities Exchange / ASX)": {"default": "BHP.AX", "currency": "AUD"},
-    "🇮🇳 India (National Stock Exchange / NSE)": {"default": "RELIANCE.NS", "currency": "INR"}
+    "🇯🇵 Japan (Nikkei 225 / Nikkei Shimbun)": {"default": "7203.T", "currency": "JPY"},
+    "🇨🇦 Canada (TSX / Globe and Mail)": {"default": "SHOP.TO", "currency": "CAD"},
+    "🇦🇺 Australia (ASX / AFR)": {"default": "BHP.AX", "currency": "AUD"},
+    "🇮🇳 India (NSE / Economic Times)": {"default": "RELIANCE.NS", "currency": "INR"}
 }
 
 # ---------------------------------------------------------
-# 6. HEADER & SEARCH BAR
+# 7. TOP HEADER & SEARCH PORTAL
 # ---------------------------------------------------------
 render_market_ribbon()
 
@@ -374,7 +423,7 @@ with head_c1:
 with head_c2:
     search_input = st.text_input(
         "Search Global Equities",
-        placeholder="🔍 Search 150k+ stocks (e.g., NVDA, EQNR.OL, META, OKTA)...",
+        placeholder="🔍 Search 150k+ stocks (e.g., NVDA, EQNR.OL, META, OKTA, DNB.OL)...",
         label_visibility="collapsed"
     )
     if search_input.strip():
@@ -384,13 +433,13 @@ with head_c3:
     b1, b2 = st.columns(2)
     with b1:
         if st.button("Create free account", type="primary", use_container_width=True):
-            st.info("Registration portal active.")
+            st.info("Registration portal active in fast preview mode.")
     with b2:
         if st.button("Log in", use_container_width=True):
-            st.success("Authenticated as Preetam Pandey")
+            st.success("Authenticated as Preetam Pandey (Institutional Tier)")
 
 # ---------------------------------------------------------
-# 7. MAIN TABS NAVIGATION (SIMPLY WALL ST STRUCTURE)
+# 8. MAIN NAVIGATION TABS
 # ---------------------------------------------------------
 main_tab1, main_tab2, main_tab3, main_tab4 = st.tabs([
     "🏠 Dashboard & Feed", 
@@ -400,21 +449,22 @@ main_tab1, main_tab2, main_tab3, main_tab4 = st.tabs([
 ])
 
 # ---------------------------------------------------------
-# TAB 1: EXACT SIMPLY WALL ST DASHBOARD LAYOUT
+# TAB 1: GEO-PRIORITIZED NEWSFEED & SOCIAL INFLUENCERS PANEL
 # ---------------------------------------------------------
 with main_tab1:
     col_left, col_right = st.columns([1.85, 1.15])
 
-    # === LEFT COLUMN: PORTFOLIO CARDS & SMART UPDATES FEED ===
+    # === LEFT COLUMN: PORTFOLIO CARDS & COUNTRY-PRIORITIZED FEED ===
     with col_left:
-        # Row of Portfolio Cards
+        # Portfolio Overview Row
         pc1, pc2 = st.columns(2)
         with pc1:
             st.markdown("""
             <div class="portfolio-card">
                 <div style="font-size: 12px; color: #8b949e; display: flex; gap: 8px; align-items: center;">
-                    <span style="background: #e11d48; color: white; padding: 2px 5px; border-radius: 3px; font-weight: bold; font-size: 10px;">J&J</span>
-                    <span style="background: #2563eb; color: white; padding: 2px 5px; border-radius: 3px; font-weight: bold; font-size: 10px;">EQNR</span>
+                    <span style="background: #e11d48; color: white; padding: 2px 5px; border-radius: 3px; font-weight: bold; font-size: 10px;">EQNR</span>
+                    <span style="background: #2563eb; color: white; padding: 2px 5px; border-radius: 3px; font-weight: bold; font-size: 10px;">DNB</span>
+                    <span style="background: #10b981; color: white; padding: 2px 5px; border-radius: 3px; font-weight: bold; font-size: 10px;">NVDA</span>
                     <span style="color: #8b949e;">+12</span>
                 </div>
                 <div style="font-size: 13px; font-weight: 700; color: #f0f6fc; margin-top: 6px;">💼 Main Institutional Portfolio</div>
@@ -423,7 +473,7 @@ with main_tab1:
                 </div>
                 <div style="display: flex; gap: 14px; font-size: 11px; color: #8b949e; margin-top: 4px;">
                     <span>1D: <b style="color: #f85149;">-US$4,521 (-1.2%)</b></span>
-                    <span>3M: <b style="color: #f85149;">-US$9,723 (-2.6%)</b></span>
+                    <span>3M: <b style="color: #3fb950;">+US$18,720 (+5.4%)</b></span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -433,152 +483,205 @@ with main_tab1:
             <div class="new-portfolio-card">
                 <div style="font-size: 24px; font-weight: 300; margin-bottom: 4px;">+</div>
                 <div style="font-size: 13px; font-weight: 600;">New Portfolio</div>
-                <div style="font-size: 11px; color: #8b949e;">Track institutional benchmarks</div>
+                <div style="font-size: 11px; color: #8b949e;">Benchmark against OSEBX & S&P 500</div>
             </div>
             """, unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Smart Updates Header & Quick Actions
-        su_col1, su_col2 = st.columns([1.5, 1])
-        with su_col1:
-            st.markdown("#### ⚡ 5 Smart Updates Today from **Demo Portfolio**")
-        with su_col2:
-            ua1, ua2 = st.columns(2)
-            with ua1:
-                st.button("Add to Watchlist", use_container_width=True)
-            with ua2:
-                st.button("Add to Portfolio", use_container_width=True)
+        # Country Location Selector for Dynamic Feed Prioritization
+        geo_c1, geo_c2 = st.columns([1.6, 1])
+        with geo_c1:
+            selected_geo = st.selectbox("📍 Domestic Market Priority (Auto-Detected / Configurable)", list(MARKETS.keys()), index=0)
+            st.session_state.user_country = selected_geo
+        with geo_c2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.caption("⚡ Domestic news prioritized $\\rightarrow$ followed by US & global macro triggers.")
 
-        # SMART UPDATE CARD 1: META
+        st.markdown("#### ⚡ Real-Time Catalyst Feed")
+
+        # FEED ITEM 1: DOMESTIC NORWEGIAN / LOCAL PRIORITY (E24 / DN / Euronext)
         st.markdown("""
         <div class="update-card">
             <div class="update-header">
                 <div>
-                    <span class="company-title">📘 Meta Platforms</span>
-                    <span style="font-size: 11px; color: #8b949e;"> • Narrative update by <b>andre_santos</b> • 2h</span>
+                    <span class="company-title">🛢️ Equinor ASA</span><span class="origin-badge">🇳🇴 E24 / Oslo Børs</span>
+                    <span style="font-size: 11px; color: #8b949e;"> • 45m ago</span>
                 </div>
-                <div class="price-pill" style="color: #3fb950;">META US$578.02 ↗ 1.2%</div>
+                <div class="price-pill" style="color: #3fb950;">EQNR NOK 312.40 ↗ +1.8%</div>
             </div>
-            <div class="update-body-title">Q2 - Update</div>
+            <div class="update-body-title">Equinor expands North Sea electrification project; Norges Bank rate path cushions dividend outlook</div>
             <div class="update-body-text">
-                Updated with the most recent Q2 earnings report. Operating margin expanded 320 bps driven by Family of Apps ad impressions, with AI infrastructure investments slated at $38-40B Capex.
+                Equinor secures revised environmental clearances for Johan Sverdrup power upgrades. European natural gas long-term contracts offset softening Brent oil benchmarks.
             </div>
-            <div style="margin-top: 8px; font-size: 12px; color: #58a6ff; cursor: pointer;">Show institutional breakdown →</div>
         </div>
         """, unsafe_allow_html=True)
+        if st.button("Show institutional breakdown →", key="btn_breakdown_eqnr"):
+            render_institutional_modal(
+                "Equinor ASA", "EQNR.OL",
+                "Equinor expands North Sea electrification project; Norges Bank rate path cushions dividend outlook",
+                "Johan Sverdrup environmental upgrades finalized. European gas realizations strong. Norges Bank policy holding rate steady at cycle terminal.",
+                "Norway (Oslo Børs / E24)"
+            )
 
-        # SMART UPDATE CARD 2: NVIDIA
+        # FEED ITEM 2: US MEGA-CAP (NVIDIA / MediaTek AI)
         st.markdown("""
         <div class="update-card">
             <div class="update-header">
                 <div>
-                    <span class="company-title">💚 NVIDIA Corporation</span>
-                    <span style="font-size: 11px; color: #8b949e;"> • Live News • 2h</span>
+                    <span class="company-title">💚 NVIDIA Corporation</span><span class="origin-badge">🇺🇸 US Market / SEC Flash</span>
+                    <span style="font-size: 11px; color: #8b949e;"> • 2h ago</span>
                 </div>
                 <div class="price-pill" style="color: #f85149;">NVDA US$217.55 ↘ -4.6%</div>
             </div>
-            <div class="update-body-title">NVIDIA Invests $3.5 Billion With MediaTek for Next-Generation AI Platforms and Automotive Solutions</div>
+            <div class="update-body-title">NVIDIA Invests $3.5 Billion With MediaTek for Next-Gen Edge AI and Automotive Solutions</div>
             <div class="update-body-text">
-                NVIDIA is expanding its automotive and custom SoC partnership through a US$3.5B multi-year investment spanning Drive Thor platforms and edge-AI client processors.
+                Multi-year architecture roadmap to deploy Drive Thor custom silicon across international EV makers, expanding addressable data-center edge compute TAM.
             </div>
-            <div style="margin-top: 8px; font-size: 12px; color: #58a6ff; cursor: pointer;">Show institutional breakdown →</div>
         </div>
         """, unsafe_allow_html=True)
+        if st.button("Show institutional breakdown →", key="btn_breakdown_nvda"):
+            render_institutional_modal(
+                "NVIDIA Corporation", "NVDA",
+                "NVIDIA Invests $3.5 Billion With MediaTek for Next-Gen Edge AI and Automotive Solutions",
+                "Expanding custom silicon and Drive Thor automotive platform. 4.6% pullback reflects broader tech sector profit taking post-earnings run.",
+                "US Market (NASDAQ / Bloomberg)"
+            )
 
-        # SMART UPDATE CARD 3: CROWDSTRIKE
+        # FEED ITEM 3: META PLATFORMS
         st.markdown("""
         <div class="update-card">
             <div class="update-header">
                 <div>
-                    <span class="company-title">🛡️ CrowdStrike Holdings</span>
-                    <span style="font-size: 11px; color: #8b949e;"> • Seeking Alpha • 4h</span>
+                    <span class="company-title">📘 Meta Platforms</span><span class="origin-badge">🇺🇸 SEC 10-Q Filing</span>
+                    <span style="font-size: 11px; color: #8b949e;"> • 3h ago</span>
                 </div>
-                <div class="price-pill" style="color: #f85149;">CRWD US$218.40 ↘ -4.2%</div>
+                <div class="price-pill" style="color: #3fb950;">META US$578.02 ↗ +1.2%</div>
             </div>
-            <div class="update-body-title">AI Multiplier: Why CrowdStrike's ARR Explosion Proves Resilience (Rating Upgrade)</div>
+            <div class="update-body-title">Meta Q2 Earnings Beat: Ad impressions up 10% YoY, AI infrastructure Capex revised to $38-40B</div>
             <div class="update-body-text">
-                Summary: CrowdStrike leverages Falcon Flex architecture to drive contract expansion. Net new ARR reached record trajectory with 26% YoY recurring revenue durability.
+                Operating margin expanded 320 bps driven by Advantage+ AI advertising algorithms. Llama 3.3 enterprise adoption acceleration cited in earnings call.
             </div>
-            <div style="margin-top: 8px; font-size: 12px; color: #58a6ff; cursor: pointer;">Show institutional breakdown →</div>
         </div>
         """, unsafe_allow_html=True)
+        if st.button("Show institutional breakdown →", key="btn_breakdown_meta"):
+            render_institutional_modal(
+                "Meta Platforms, Inc.", "META",
+                "Meta Q2 Earnings Beat: Ad impressions up 10% YoY, AI infrastructure Capex revised to $38-40B",
+                "Ad efficiency gains driving 320 bps margin expansion. Substantial capex commitment into custom AI cluster clusters.",
+                "US Market (NASDAQ / SEC)"
+            )
 
-        # SMART UPDATE CARD 4: OKTA
+        # FEED ITEM 4: LOCAL NORDIC BANKING (DNB BANK)
         st.markdown("""
         <div class="update-card">
             <div class="update-header">
                 <div>
-                    <span class="company-title">🔐 Okta, Inc.</span>
-                    <span style="font-size: 11px; color: #8b949e;"> • Event Trigger • 4h</span>
+                    <span class="company-title">🏦 DNB Bank ASA</span><span class="origin-badge">🇳🇴 Finansavisen</span>
+                    <span style="font-size: 11px; color: #8b949e;"> • 5h ago</span>
                 </div>
-                <div class="price-pill" style="color: #f85149;">OKTA US$166.23 ↘ -3.9%</div>
+                <div class="price-pill" style="color: #3fb950;">DNB NOK 214.60 ↗ +0.9%</div>
             </div>
-            <div class="update-body-title">Okta: AI Identity Breakout vs. Enterprise IT Scrutiny</div>
+            <div class="update-body-title">DNB Net Interest Margin Remains Resilient as Norges Bank Holds Policy Rate</div>
             <div class="update-body-text">
-                Delivered 11% revenue growth, raised full-year operating cash flow projections, and introduced automated governance modules across cloud directories.
+                Norwegian corporate lending volume grew 4.2% annualized. Loan loss provisions remain at cyclical lows, supporting 75%+ dividend payout policy.
             </div>
-            <div style="margin-top: 8px; font-size: 12px; color: #58a6ff; cursor: pointer;">Show institutional breakdown →</div>
         </div>
         """, unsafe_allow_html=True)
+        if st.button("Show institutional breakdown →", key="btn_breakdown_dnb"):
+            render_institutional_modal(
+                "DNB Bank ASA", "DNB.OL",
+                "DNB Net Interest Margin Remains Resilient as Norges Bank Holds Policy Rate",
+                "Corporate lending expansions, robust NIM preservation, low default rates across Nordic shipping and energy loan books.",
+                "Norway (Oslo Børs / Finansavisen)"
+            )
 
-    # === RIGHT COLUMN: COMMUNITY INSIGHTS, THE FOXHOLE & TOP PICKS ===
+    # === RIGHT COLUMN: SOCIAL INTELLIGENCE & KEY INFLUENCERS FEED ===
     with col_right:
-        # Community Post 1: The Foxhole
+        st.markdown("#### 💬 Social Intelligence & Key Influencers")
+        st.caption("Live signals from Elon Musk, US Executive, Truth Social, Fed & Market Movers")
+
+        # SOCIAL POST 1: ELON MUSK (X)
         st.markdown("""
-        <div class="community-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span class="author-meta">👤 mitchell_lawler</span>
-                <span class="badge-amber">🦊 THE FOXHOLE</span>
+        <div class="social-card">
+            <div class="social-header">
+                <span class="social-author">🚀 Elon Musk (@elonmusk)</span>
+                <span class="social-tag tag-x">𝕏 Post</span>
             </div>
-            <div style="font-size: 14px; font-weight: 700; color: #f0f6fc; line-height: 1.3; margin-bottom: 8px;">
-                The world's in stitches over humanoid robotics. I still think they're the only mathematical answer to OECD demographic contraction.
+            <div class="social-content">
+                "Dojo 2 compute clusters are now operational. Hardware compute density is scaling 10x faster than traditional hyperscaler server buildouts. Autonomous logistics will invert global freight economics."
             </div>
-            <div style="background: #0d1117; padding: 10px; border-radius: 6px; border: 1px solid #30363d; font-size: 11px; color: #8b949e; margin-bottom: 10px;">
-                📊 <b>OECD Manufacturing Productivity Index vs Labor Deficit (2024-2030E)</b><br>
-                Demographic replacement rates fall below 1.4 in Nordic and East Asian manufacturing corridors.
-            </div>
-            <div style="font-size: 12px; color: #8b949e; display: flex; justify-content: space-between;">
-                <span>👍 8 reactions • 💬 7 comments</span>
-                <span>11h ago</span>
+            <div class="social-metrics">
+                <span>❤️ 48.2K • 🔁 11.4K</span>
+                <span>45m ago • Market Impact: <b>HIGH (TSLA, NVDA)</b></span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        # Community Post 2: Market Insights
+        # SOCIAL POST 2: US EXECUTIVE / TRUTH SOCIAL
         st.markdown("""
-        <div class="community-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span class="author-meta">👤 Andrew Legget</span>
-                <span class="badge-amber">📈 MARKET INSIGHTS</span>
+        <div class="social-card">
+            <div class="social-header">
+                <span class="social-author">🏛️ US Executive Office</span>
+                <span class="social-tag tag-truth">Truth Social</span>
             </div>
-            <div style="font-size: 14px; font-weight: 700; color: #f0f6fc; line-height: 1.3; margin-bottom: 8px;">
-                Great earnings season, but are corporate cash conversions keeping pace?
+            <div class="social-content">
+                "We are announcing critical domestic semiconductor and energy independence tariffs starting next quarter. Companies producing inside the US and allied Nordic energy corridors will receive massive tax credits!"
             </div>
-            <div style="font-size: 12px; color: #8b949e; line-height: 1.4; margin-bottom: 10px;">
-                At first glance, S&P 500 blended EPS growth topped 11.2%. But when evaluating FCF yield ex-Capex among mega-cap tech, working capital divergence is reaching cycle highs.
-            </div>
-            <div style="font-size: 12px; color: #8b949e; display: flex; justify-content: space-between;">
-                <span>👍 7 reactions • 💬 5 comments</span>
-                <span>4d ago</span>
+            <div class="social-metrics">
+                <span>❤️ 92.1K • 🔁 24.3K</span>
+                <span>2h ago • Market Impact: <b>CRITICAL (Tariffs/FX)</b></span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        # Community Post 3: Community Top Picks
+        # SOCIAL POST 3: FEDERAL RESERVE / JEROME POWELL
         st.markdown("""
-        <div class="community-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span class="author-meta">👤 Karthik_Selva</span>
-                <span class="badge-amber">⭐ COMMUNITY TOP PICKS</span>
+        <div class="social-card">
+            <div class="social-header">
+                <span class="social-author">🏦 Federal Reserve / FOMC</span>
+                <span class="social-tag tag-fed">Fed Statement</span>
             </div>
-            <div style="font-size: 14px; font-weight: 700; color: #f0f6fc; margin-bottom: 8px;">
-                After The Earnings: Key Rebalancing Triggers
+            <div class="social-content">
+                "The FOMC will maintain a restrictive posture until Core PCE data demonstrates sustained alignment toward the 2.0% mandate. Labor market resilience allows patience before policy easing."
             </div>
-            <div style="font-size: 12px; color: #8b949e; line-height: 1.5;">
-                • <b>Meta Platforms:</b> Ad monetization durability outpaces TikTok share loss.<br>
-                • <b>Equinor (EQNR):</b> Strong European gas realization offsetting Brent range-trading.<br>
-                • <b>ASML:</b> High-NA EUV backlog validation confirms 2026 semi recovery.
+            <div class="social-metrics">
+                <span>📊 Press Briefing • Live</span>
+                <span>4h ago • Market Impact: <b>HIGH (Yields/USD)</b></span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # SOCIAL POST 4: JENSEN HUANG / GTC FLASH
+        st.markdown("""
+        <div class="social-card">
+            <div class="social-header">
+                <span class="social-author">⚡ Jensen Huang (NVIDIA)</span>
+                <span class="social-tag tag-x">Keynote Flash</span>
+            </div>
+            <div class="social-content">
+                "Generative AI has reached the physical inflection point. Robotics, automotive digital twins, and synthetic biology are the next trillion-dollar computing substrates."
+            </div>
+            <div class="social-metrics">
+                <span>❤️ 31.8K • 🔁 8.2K</span>
+                <span>6h ago • Market Impact: <b>HIGH (Semi Sector)</b></span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # SOCIAL POST 5: MARK ZUCKERBERG / META AI
+        st.markdown("""
+        <div class="social-card">
+            <div class="social-header">
+                <span class="social-author">🌐 Mark Zuckerberg</span>
+                <span class="social-tag tag-meta">Threads / Meta</span>
+            </div>
+            <div class="social-content">
+                "Llama models are now passing 500M open-source deployments globally. Open compute architectures are outperforming closed proprietary APIs on cost per token."
+            </div>
+            <div class="social-metrics">
+                <span>❤️ 22.4K • 🔁 4.1K</span>
+                <span>8h ago • Market Impact: <b>MED (Cloud/AI)</b></span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -587,7 +690,6 @@ with main_tab1:
 # TAB 2: INSTITUTIONAL RESEARCH & SNOWFLAKE RADAR
 # ---------------------------------------------------------
 with main_tab2:
-    # Market Selector & Universe
     u_c1, u_c2, u_c3 = st.columns([1.5, 1, 1])
     with u_c1:
         sel_market = st.selectbox("Market Exchange", list(MARKETS.keys()), index=0)
@@ -621,7 +723,7 @@ with main_tab2:
             m4.metric("Dividend Yield", f"{div_val*100:.2f}%" if div_val else "0.00%")
             m5.metric("52W Range", f"{info.get('fiftyTwoWeekLow', 0):.2f} - {info.get('fiftyTwoWeekHigh', 0):.2f}")
 
-            # Chart + Snowflake
+            # Candlestick + Snowflake Radar
             c_left, c_right = st.columns([1.8, 1.2])
             with c_left:
                 st.markdown("##### 📈 Price Action & Structure")
@@ -639,7 +741,7 @@ with main_tab2:
                 fig_s = generate_snowflake_chart(info, hist)
                 st.plotly_chart(fig_s, use_container_width=True)
 
-            # Gemini 5-Step Synthesis
+            # Interactive Catalyst Research Generator
             st.markdown("---")
             st.markdown("### 📋 Institutional Catalyst Breakdown & Macro Synthesis")
             c_input = st.text_area(
@@ -652,20 +754,19 @@ with main_tab2:
                     client = get_gemini_client()
                     
                     sys_prompt = """
-You are MarketCatalyst AI, an elite Equity Research Analyst and Financial Intelligence Specialist. Your domain expertise covers both US financial markets (S&P 500, NASDAQ, NYSE) and Norwegian/European markets (Oslo Børs / OSEBX, Euronext). You specialize in event-driven financial analysis, correlating historical price behavior with news releases, leadership statements, corporate filings, and macroeconomic developments.
+You are MarketCatalyst AI, an elite Equity Research Analyst and Financial Intelligence Specialist. 
+Analyze the security using the 5-Step Key Analytical Framework:
+1. Catalyst Breakdown: Core event timing and financial impact.
+2. Historical Context & Price Action: Historical beat/miss reaction comparison.
+3. Macro & Sector Drivers: Central bank posture (Fed / Norges Bank), yields, currency (USD/NOK), commodities (Brent).
+4. Fundamental & Dividend Health: Margins, FCF, liquidity, dividend durability.
+5. Scenario Synthesis: Bull/Bear price pathways, downside risks, watchpoint calendar dates.
 
-Execute analysis systematically using the 5-Step Key Analytical Framework:
-1. Catalyst Breakdown: Identify core event (earnings, guidance, central bank action, M&A, dividend shifts).
-2. Historical Context & Price Action: Quantify market reaction vs historical beat/miss precedent.
-3. Macro & Sector Drivers: Fed/Norges Bank/ECB rate paths, energy/Brent dynamics, FX (USD/NOK, EUR/USD).
-4. Fundamental & Dividend Health: Balance sheet liquidity, free cash flow conversion, dividend sustainability.
-5. Scenario Synthesis: Clear Bull and Bear valuation pathways, key risks, and upcoming event dates.
-
-Format with bold headers, concise bullet points, and scannable institutional tables. Maintain objective, data-driven rigor. Provide market intelligence and educational analysis without personalized investment advice.
+Format with bold subheaders, scannable bullet points, and data tables. Never provide personal investment advice.
 """
 
                     p_text = f"""
-Analyze the following security telemetry:
+Analyze the security telemetry:
 - Symbol: {target_ticker} ({info.get('longName', target_ticker)})
 - Sector / Industry: {info.get('sector', 'N/A')} / {info.get('industry', 'N/A')}
 - Market Context: {sel_market}
@@ -723,13 +824,14 @@ with main_tab4:
         {"Ticker": "NVDA", "Name": "NVIDIA", "Market": "US", "P/E": 32.4, "Div Yield": "0.03%", "Snowflake Health": "5.6/6"},
         {"Ticker": "EQNR.OL", "Name": "Equinor", "Market": "NO", "P/E": 7.8, "Div Yield": "8.40%", "Snowflake Health": "5.8/6"},
         {"Ticker": "NOVO-B.CO", "Name": "Novo Nordisk", "Market": "DK", "P/E": 34.1, "Div Yield": "1.20%", "Snowflake Health": "5.4/6"},
+        {"Ticker": "DNB.OL", "Name": "DNB Bank", "Market": "NO", "P/E": 8.9, "Div Yield": "7.10%", "Snowflake Health": "5.5/6"},
         {"Ticker": "ASML", "Name": "ASML Holding", "Market": "NL", "P/E": 41.2, "Div Yield": "0.90%", "Snowflake Health": "5.2/6"},
         {"Ticker": "VOLV-B.ST", "Name": "Volvo Group", "Market": "SE", "P/E": 10.2, "Div Yield": "6.80%", "Snowflake Health": "5.1/6"},
     ])
     st.dataframe(sample_screener, use_container_width=True)
 
 # ---------------------------------------------------------
-# 8. INSTITUTIONAL FOOTER (© 2026 ISERVE)
+# 9. INSTITUTIONAL FOOTER (© 2026 ISERVE)
 # ---------------------------------------------------------
 st.markdown("""
 <div class="footer-container">
