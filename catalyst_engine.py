@@ -1,59 +1,83 @@
 import os
+import sys
 import requests
 import yfinance as yf
 from google import genai
 
+# Ingest Environment Variables / Secrets
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
+# Verification check
+if not GEMINI_API_KEY:
+  print("[-] Error: GEMINI_API_KEY secret is missing.")
+  sys.exit(1)
+if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+  print("[-] Error: Telegram secrets are missing.")
+  sys.exit(1)
+
 
 def send_telegram_alert(message: str):
-  """Dispatches formatted intelligence reports directly to Telegram."""
+  """Dispatches message to Telegram with Markdown fallback to plain text."""
   url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
   payload = {
       "chat_id": TELEGRAM_CHAT_ID,
       "text": message,
       "parse_mode": "Markdown",
   }
-  response = requests.post(url, json=payload, timeout=15)
-  return response.json()
+  res = requests.post(url, json=payload, timeout=20)
+  # If Markdown parsing fails due to unescaped characters, send as plain text
+  if res.status_code != 200:
+    print(
+        f"[!] Telegram Markdown dispatch warning ({res.status_code}). Retrying"
+        " as plain text..."
+    )
+    payload.pop("parse_mode")
+    res = requests.post(url, json=payload, timeout=20)
+  return res.json()
 
 
 def get_market_quote(ticker_symbol: str) -> dict:
-  """Fetches real-time price and percentage change."""
+  """Safely retrieves market telemetry."""
   try:
     ticker = yf.Ticker(ticker_symbol)
     hist = ticker.history(period="2d")
     if len(hist) >= 2:
-      prev_close = hist["Close"].iloc[-2]
-      curr_price = hist["Close"].iloc[-1]
-      pct_change = ((curr_price - prev_close) / prev_close) * 100
-      return {
-          "price": round(curr_price, 2),
-          "pct": f"{pct_change:+.2f}%",
-          "valid": True,
-      }
+      prev = hist["Close"].iloc[-2]
+      curr = hist["Close"].iloc[-1]
+      pct = ((curr - prev) / prev) * 100
+      return {"price": round(curr, 2), "pct": f"{pct:+.2f}%"}
     elif len(hist) == 1:
-      return {
-          "price": round(hist["Close"].iloc[-1], 2),
-          "pct": "0.00%",
-          "valid": True,
-      }
-  except Exception:
-    pass
-  return {"price": "N/A", "pct": "N/A", "valid": False}
+      return {"price": round(hist["Close"].iloc[-1], 2), "pct": "0.00%"}
+  except Exception as e:
+    print(f"[!] Warning fetching {ticker_symbol}: {e}")
+  return {"price": "N/A", "pct": "N/A"}
 
 
-# 1. Market Telemetry Ingestion
-# Domestic (Oslo Børs)
+def generate_synthesis(client, prompt: str) -> str:
+  """Executes synthesis with dynamic model fallback."""
+  for model_id in ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]:
+    try:
+      response = client.models.generate_content(
+          model=model_id, contents=[prompt]
+      )
+      if response.text:
+        return response.text
+    except Exception as err:
+      print(f"[!] Model {model_id} failed: {err}. Trying fallback...")
+  raise RuntimeError("All Gemini model endpoints failed.")
+
+
+print("[+] Ingesting live market telemetry...")
+# Oslo Børs Telemetry
 eqnr = get_market_quote("EQNR.OL")
 kog = get_market_quote("KOG.OL")
 var_ol = get_market_quote("VAR.OL")
 akrbp = get_market_quote("AKRBP.OL")
 usdnok = get_market_quote("USDNOK=X")
 
-# International, Geopolitical & Commodity Telemetry
+# Global & Commodity Telemetry
 brent = get_market_quote("BZ=F")
 spx = get_market_quote("^GSPC")
 asx = get_market_quote("^AXJO")
@@ -62,42 +86,42 @@ ongc = get_market_quote("ONGC.NS")
 reliance = get_market_quote("RELIANCE.NS")
 ioc = get_market_quote("IOC.NS")
 
-# Initialize Gemini Client
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# =======================================================
-# MESSAGE 1: OSLOBØRS (Domestic E&P, Defense, FX)
-# =======================================================
+# =========================================================
+# MESSAGE 1: OSLOBØRS (Norway Domestic, E&P, Defense, FX)
+# =========================================================
 prompt_oslo = f"""
-You are MarketCatalyst AI, an institutional Equity Research Analyst covering Oslo Børs (OSEBX).
-Generate an institutional morning/hourly flash report.
+You are MarketCatalyst AI, an elite Equity Research Analyst covering Oslo Børs (OSEBX).
+Generate an institutional morning/hourly intelligence flash.
 The top headline MUST BE: 🏛️ [Oslobørs] Equity & Energy Intelligence
 
 Market Data:
-- Brent Spot: ${brent['price']} ({brent['pct']})
-- USD/NOK: {usdnok['price']} ({usdnok['pct']})
+- Brent Crude Spot: ${brent['price']} ({brent['pct']})
+- USD/NOK FX: {usdnok['price']} ({usdnok['pct']})
 - EQNR.OL: {eqnr['price']} NOK ({eqnr['pct']}) | AKRBP.OL: {akrbp['price']} NOK ({akrbp['pct']})
 - VAR.OL: {var_ol['price']} NOK ({var_ol['pct']}) | KOG.OL: {kog['price']} NOK ({kog['pct']})
 
-Apply the 5-step framework concisely:
-* **Catalyst & Price Action:** Core moves across offshore E&P and Kongsberg Gruppen backlog momentum.
-* **Macro & FX Drivers:** Brent crude spot resilience on FCF yields and USD/NOK translation dynamics.
-* **Fundamental & Balance Sheet:** Dividend safety metrics and capital expenditure discipline.
-* **Actionable Watchpoints:** Key technical support/resistance bands.
+Structure:
+* **Catalyst & Price Action:** Core moves across offshore E&P and Kongsberg Gruppen defense backlog.
+* **Macro & FX Drivers:** Brent crude spot impact on FCF yields and USD/NOK currency translation.
+* **Fundamental & Balance Sheet:** Dividend coverage metrics and capex discipline.
+* **Actionable Watchpoints:** Key technical levels for KOG.OL and EQNR.OL.
 
-Strict limit: 220 words. Use crisp bullet points and clear bold headings.
+Strict limit: 220 words. Format with bullet points and bold headers.
 """
 
-response_oslo = client.models.generate_content(
-    model="gemini-3.6-flash", contents=[prompt_oslo]
-)
+print("[+] Synthesizing Oslobørs report...")
+report_oslo = generate_synthesis(client, prompt_oslo)
+send_telegram_alert(report_oslo)
+print("[+] Message 1 ([Oslobørs]) successfully dispatched.")
 
-# =======================================================
+# =========================================================
 # MESSAGE 2: ISEWAINTERNATIONAL (US, APAC & India Energy)
-# =======================================================
+# =========================================================
 prompt_intl = f"""
-You are MarketCatalyst AI, an institutional Equity Research Analyst covering Global Markets.
-Generate an institutional geopolitical and multi-market flash report.
+You are MarketCatalyst AI, an elite Equity Research Analyst covering Global Markets.
+Generate an institutional geopolitical and multi-market flash.
 The top headline MUST BE: 🌐 [IsewaInternational] US, APAC & Geopolitical Energy Flash
 
 Market Data:
@@ -107,24 +131,17 @@ Market Data:
 - Japan (Nikkei 225): {nikkei['price']} ({nikkei['pct']})
 - Indian Energy: ONGC ({ongc['price']} INR, {ongc['pct']}), Reliance ({reliance['price']} INR, {reliance['pct']}), IOC ({ioc['price']} INR, {ioc['pct']})
 
-Apply the 5-step framework concisely:
-* **US Index & Defense Watch:** S&P 500 momentum, US Treasury yield sensitivity, and defense contractors (Raytheon, Lockheed, Ondas).
-* **Geopolitical & Brent Dynamics:** Maritime chokepoints, supply elasticity, and crude price action.
+Structure:
+* **US Index & Defense Watch:** S&P 500 momentum, US Treasury yield sensitivity, and defense pipeline (Raytheon, Lockheed, Ondas).
+* **Geopolitical & Brent Dynamics:** Maritime bottlenecks, supply elasticity, and crude price action.
 * **APAC & Indian Energy Matrix:**
-  - ASX & Nikkei opening/closing tone on raw commodities.
-  - Indian downstream vs. upstream dynamics (ONGC crude margin expansion vs. Reliance/IOC refining margins).
+  - ASX & Nikkei opening/closing tone on raw energy commodities.
+  - Indian downstream vs. upstream dynamics (ONGC upstream crude margin expansion vs. Reliance/IOC refining margins).
 
-Strict limit: 250 words. Use crisp bullet points and clear bold headings.
+Strict limit: 250 words. Format with bullet points and bold headers.
 """
 
-response_intl = client.models.generate_content(
-    model="gemini-3.6-flash", contents=[prompt_intl]
-)
-
-# Dispatch two distinct messages to Telegram
-send_telegram_alert(response_oslo.text)
-send_telegram_alert(response_intl.text)
-print(
-    "[+] Successfully executed dual dispatch: [Oslobørs] and"
-    " [IsewaInternational]"
-)
+print("[+] Synthesizing IsewaInternational report...")
+report_intl = generate_synthesis(client, prompt_intl)
+send_telegram_alert(report_intl)
+print("[+] Message 2 ([IsewaInternational]) successfully dispatched.")
