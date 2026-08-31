@@ -75,6 +75,7 @@ if run_btn and ticker_input:
       f"Ingesting live telemetry & synthesizing research for {ticker_input}..."
   ):
     try:
+      # 1. Ingest Market Telemetry
       stock = yf.Ticker(ticker_input)
       info = stock.info or {}
       hist = stock.history(period="1y")
@@ -109,9 +110,7 @@ if run_btn and ticker_input:
             else "N/A"
         )
         target_mean = info.get("targetMeanPrice", "N/A")
-        recommendation_key = info.get(
-            "recommendationKey", "N/A"
-        ).upper()
+        recommendation_key = info.get("recommendationKey", "N/A").upper()
 
         market_context = f"""
                 Ticker: {ticker_input}
@@ -126,6 +125,7 @@ if run_btn and ticker_input:
                 Market Cap: {info.get('marketCap', 'N/A')} {currency}
                 """
 
+        # 2. Institutional Synthesis via Gemini
         client = genai.Client(api_key=GEMINI_API_KEY)
         system_prompt = """
                 You are MarketCatalyst AI, an elite Equity Research Analyst covering US markets (S&P 500, NASDAQ) and Norwegian markets (Oslo Børs / OSEBX).
@@ -157,7 +157,7 @@ if run_btn and ticker_input:
                 """
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=[system_prompt, market_context],
         )
 
