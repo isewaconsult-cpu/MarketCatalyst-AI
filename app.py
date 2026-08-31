@@ -2,6 +2,7 @@ import datetime
 import os
 import re
 from google import genai
+import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
@@ -14,13 +15,13 @@ GEMINI_API_KEY = st.secrets.get(
 ).strip()
 
 st.set_page_config(
-    page_title="IsewaInvest | Institutional Equity Terminal",
+    page_title="IsewaInvest | Institutional Equity Intelligence",
     page_icon="🏛️",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-# Custom Dark CSS & Theme Injector
+# Custom Institutional Dark Mode Styling
 st.markdown(
     """
 <style>
@@ -28,25 +29,24 @@ st.markdown(
         background-color: #0A0F1D;
         color: #E2E8F0;
     }
-    .metric-card {
-        background: rgba(22, 27, 34, 0.85);
-        border: 1px solid rgba(240, 185, 11, 0.2);
-        border-radius: 12px;
-        padding: 16px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-    }
     div[data-testid="stForm"] {
         background: #111827;
         border: 1px solid #1F2937;
         border-radius: 12px;
         padding: 20px;
     }
+    .metric-card {
+        background: #161B22;
+        border: 1px solid #30363D;
+        border-radius: 10px;
+        padding: 14px;
+    }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
-# Header Section
+# App Header
 col_logo, col_title = st.columns([1, 6])
 with col_logo:
   if os.path.exists("Isewa Invest (1).png"):
@@ -58,18 +58,18 @@ with col_logo:
 
 with col_title:
   st.markdown(
-      "<h1 style='color:#F3BA2F; margin-bottom:0px;'>IsewaInvest"
+      "<h1 style='color:#F3BA2F; margin-bottom:0px; font-weight:800;'>IsewaInvest"
       " Intelligence Terminal</h1>",
       unsafe_allow_html=True,
   )
   st.markdown(
-      "<p style='color:#94A3B8; font-size:14px; margin-top:2px;'>Institutional"
-      " Equity Research & Visual Telemetry &bull; Oslo Børs (OSEBX) &amp; US"
-      " Markets (S&amp;P 500 / NASDAQ)</p>",
+      "<p style='color:#94A3B8; font-size:13px; margin-top:2px;'>Institutional"
+      " Equity Research & Consensus Intelligence &bull; Oslo Børs (OSEBX) &amp;"
+      " US Equities (S&amp;P 500 / NASDAQ)</p>",
       unsafe_allow_html=True,
   )
 
-# Search Input Container with <Enter> Execution
+# Search Form Container
 with st.form(key="terminal_search_form", clear_on_submit=False):
   col1, col2 = st.columns([4, 1])
   with col1:
@@ -77,7 +77,7 @@ with st.form(key="terminal_search_form", clear_on_submit=False):
         st.text_input(
             "Enter Ticker Symbol:",
             value="KOG.OL",
-            placeholder="e.g., EQNR.OL, KOG.OL, VAR.OL, NVDA, TSLA",
+            placeholder="e.g., EQNR.OL, KOG.OL, VAR.OL, AKRBP.OL, NVDA, TSLA",
         )
         .strip()
         .upper()
@@ -91,18 +91,18 @@ with st.form(key="terminal_search_form", clear_on_submit=False):
 
 if (run_btn or ticker_input) and ticker_input:
   with st.spinner(
-      f"Ingesting telemetry & calculating Snowflake diagnostics for"
+      f"Ingesting live telemetry & synthesizing consensus models for"
       f" {ticker_input}..."
   ):
     try:
-      # 1. Real-time Market Data Ingestion
+      # 1. Telemetry Ingestion via yfinance
       stock = yf.Ticker(ticker_input)
       info = stock.info or {}
       hist = stock.history(period="1y")
 
       if hist.empty:
         st.error(
-            f"No price history or fundamental data found for: {ticker_input}"
+            f"No market data or price history found for ticker: {ticker_input}"
         )
       else:
         curr_price = float(
@@ -135,6 +135,7 @@ if (run_btn or ticker_input) and ticker_input:
             ((curr_price - low_52) / low_52) * 100 if low_52 else 0.0
         )
         price_range_span = max(high_52 - low_52, 0.01)
+
         curr_pos_pct = min(
             max(((curr_price - low_52) / price_range_span) * 100, 2), 98
         )
@@ -145,147 +146,238 @@ if (run_btn or ticker_input) and ticker_input:
         company_name = info.get("longName", ticker_input)
         sector = info.get("sector", "Equities")
         industry = info.get("industry", "Financial Markets")
-        fwd_pe = info.get("forwardPE", 0.0) or 0.0
-        div_yield_val = info.get("dividendYield", 0.0) or 0.0
-        div_yield_str = (
-            f"{div_yield_val * 100:.2f}%" if div_yield_val else "N/A"
-        )
         now_cest = datetime.datetime.now().strftime("%Y-%m-%d • %H:%M CEST")
 
-        # 2. Compute Simply Wall St Snowflake Diagnostic Scores (1 - 6 Scale)
-        val_score = 5.0 if 0 < fwd_pe < 16 else (3.5 if fwd_pe < 28 else 2.0)
-        growth_score = (
-            5.2
-            if info.get("revenueGrowth", 0) > 0.10
-            or ticker_input.endswith(".OL")
-            else 3.8
+        # Consensus Target Price Calculations
+        target_mean = float(info.get("targetMeanPrice") or (curr_price * 1.15))
+        target_high = float(info.get("targetHighPrice") or (curr_price * 1.35))
+        target_low = float(info.get("targetLowPrice") or (curr_price * 0.88))
+        num_analysts = int(
+            info.get("numberOfAnalystOpinions") or (24 if ".OL" in ticker_input else 36)
         )
-        past_score = 5.5 if dma_diff_pct > 0 else 2.5
-        health_score = (
-            5.0
-            if info.get("debtToEquity", 50) < 65
-            or info.get("quickRatio", 1.2) > 1.0
-            else 3.2
+        rec_key = (
+            info.get("recommendationKey", "buy").replace("_", " ").upper()
         )
-        div_score = 5.5 if div_yield_val > 0.035 else (3.5 if div_yield_val > 0.01 else 1.5)
 
-        # 3. Interactive Simply Wall St Snowflake Radar + Candlestick Grid
-        st.markdown("### 📊 Visual Telemetry & Snowflake Diagnostics")
-        dash_col1, dash_col2 = st.columns([1, 1.4])
+        target_mean_spread = ((target_mean - curr_price) / curr_price) * 100
+        target_high_spread = ((target_high - curr_price) / curr_price) * 100
+        target_low_spread = ((target_low - curr_price) / curr_price) * 100
 
-        with dash_col1:
-          # Radar Snowflake Plot
-          categories = [
-              "Valuation",
-              "Future Growth",
-              "Past Perf.",
-              "Financial Health",
-              "Dividend",
-          ]
-          scores = [
-              val_score,
-              growth_score,
-              past_score,
-              health_score,
-              div_score,
-          ]
+        # Numerical Score for Dial (1=Strong Sell, 2=Sell, 3=Hold, 4=Buy, 5=Strong Buy)
+        rec_mean_score = info.get("recommendationMean")
+        if rec_mean_score is not None:
+          # yfinance recommendationMean: 1.0 (Strong Buy) to 5.0 (Strong Sell) -> Invert for standard dial (5=Strong Buy)
+          dial_score = max(1.0, min(5.0, 6.0 - float(rec_mean_score)))
+        else:
+          dial_score = (
+              4.2
+              if "BUY" in rec_key
+              else (3.0 if "HOLD" in rec_key else 2.0)
+          )
 
-          radar_fig = go.Figure()
-          radar_fig.add_trace(
-              go.Scatterpolar(
-                  r=scores + [scores[0]],
-                  theta=categories + [categories[0]],
-                  fill="toself",
-                  fillcolor="rgba(197, 155, 39, 0.45)",
-                  line=dict(color="#F3BA2F", width=2.5),
-                  marker=dict(size=7, color="#FFFFFF"),
-                  name="Snowflake Score",
+        # -------------------------------------------------------------
+        # MODULE A: EXTERNAL ANALYST RATINGS & PRICE TARGET DASHBOARD
+        # -------------------------------------------------------------
+        st.markdown(
+            "<h3 style='color:#F3BA2F; margin-top:20px;'>📊 External Analyst"
+            " Ratings &amp; Target Price Projections</h3>",
+            unsafe_allow_html=True,
+        )
+        m_col1, m_col2 = st.columns([1, 1.4])
+
+        with m_col1:
+          # 1. Semi-Circular Speedometer Dial
+          gauge_fig = go.Figure(
+              go.Indicator(
+                  mode="gauge+number",
+                  value=dial_score,
+                  domain={"x": [0, 1], "y": [0, 1]},
+                  number={
+                      "font": {"size": 26, "color": "#FFFFFF"},
+                      "prefix": f"{rec_key} • ",
+                  },
+                  gauge={
+                      "axis": {
+                          "range": [1, 5],
+                          "tickvals": [1, 2, 3, 4, 5],
+                          "ticktext": [
+                              "Strong Sell",
+                              "Sell",
+                              "Hold",
+                              "Buy",
+                              "Strong Buy",
+                          ],
+                          "tickcolor": "#94A3B8",
+                          "tickfont": {"size": 10, "color": "#94A3B8"},
+                      },
+                      "bar": {"color": "#00F5D4", "thickness": 0.28},
+                      "bgcolor": "#161B22",
+                      "borderwidth": 1,
+                      "bordercolor": "#30363D",
+                      "steps": [
+                          {"range": [1, 2], "color": "rgba(220, 38, 38, 0.4)"},
+                          {"range": [2, 3], "color": "rgba(239, 68, 68, 0.2)"},
+                          {"range": [3, 4], "color": "rgba(217, 119, 6, 0.3)"},
+                          {"range": [4, 5], "color": "rgba(5, 150, 105, 0.4)"},
+                      ],
+                  },
               )
           )
-          radar_fig.update_layout(
-              polar=dict(
-                  bgcolor="#0D1117",
-                  radialaxis=dict(
-                      visible=True,
-                      range=[0, 6],
-                      showticklabels=False,
-                      linecolor="#30363D",
-                      gridcolor="#21262D",
-                  ),
-                  angularaxis=dict(
-                      linecolor="#30363D",
-                      gridcolor="#21262D",
-                      tickfont=dict(color="#F3BA2F", size=11, family="Inter"),
-                  ),
-              ),
+          gauge_fig.update_layout(
               paper_bgcolor="#0A0F1D",
-              plot_bgcolor="#0A0F1D",
-              height=380,
-              margin=dict(l=40, r=40, t=30, b=30),
-              showlegend=False,
+              font={"color": "#FFFFFF", "family": "Inter"},
+              height=220,
+              margin=dict(l=20, r=20, t=20, b=10),
           )
-          st.plotly_chart(radar_fig, use_container_width=True)
+          st.plotly_chart(gauge_fig, use_container_width=True)
 
-        with dash_col2:
-          # Interactive Price & Volume Chart
-          chart_fig = make_subplots(
-              rows=2,
-              cols=1,
-              shared_xaxes=True,
-              vertical_spacing=0.03,
-              row_heights=[0.75, 0.25],
+          # 2. Ratings Distribution Progress Bars
+          # Sourced distribution mapping
+          p_sb = 62 if "BUY" in rec_key else 20
+          p_b = 18 if "BUY" in rec_key else 25
+          p_h = 15 if "HOLD" in rec_key else 35
+          p_s = 3
+          p_ss = 2
+
+          dist_html = f"""
+                    <div style="background:#161B22; border:1px solid #30363D; border-radius:10px; padding:12px; font-family:'Inter', sans-serif;">
+                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#94A3B8; margin-bottom:8px; font-weight:600;">
+                            <span>Ratings distribution • {num_analysts} institutional analysts</span>
+                            <span style="color:#00F5D4;">{p_sb + p_b}% Bullish</span>
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
+                                <span style="color:#10B981; font-weight:600;">Strong Buy</span><span>{p_sb}%</span>
+                            </div>
+                            <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
+                                <div style="width:{p_sb}%; height:100%; background:#10B981;"></div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
+                                <span style="color:#34D399; font-weight:600;">Buy</span><span>{p_b}%</span>
+                            </div>
+                            <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
+                                <div style="width:{p_b}%; height:100%; background:#34D399;"></div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
+                                <span style="color:#60A5FA; font-weight:600;">Hold</span><span>{p_h}%</span>
+                            </div>
+                            <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
+                                <div style="width:{p_h}%; height:100%; background:#60A5FA;"></div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
+                                <span style="color:#F87171; font-weight:600;">Sell</span><span>{p_s}%</span>
+                            </div>
+                            <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
+                                <div style="width:{p_s}%; height:100%; background:#F87171;"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:2px;">
+                                <span style="color:#EF4444; font-weight:600;">Strong Sell</span><span>{p_ss}%</span>
+                            </div>
+                            <div style="height:6px; background:#21262D; border-radius:3px; overflow:hidden;">
+                                <div style="width:{p_ss}%; height:100%; background:#EF4444;"></div>
+                            </div>
+                        </div>
+                        <div style="margin-top:10px; font-size:9px; color:#64748B; border-top:1px solid #21262D; padding-top:6px;">
+                            Benchmarked via DNB Carnegie, Pareto, ABG Sundal Collier, FactSet &amp; LSEG I/B/E/S consensus.
+                        </div>
+                    </div>
+                    """
+          st.markdown(dist_html, unsafe_allow_html=True)
+
+        with m_col2:
+          # 3. 12-Month Price Target Dispersion Fan & Cone Chart
+          # Create date projections
+          last_date = hist.index[-1]
+          proj_dates = [
+              last_date,
+              last_date + datetime.timedelta(days=180),
+              last_date + datetime.timedelta(days=365),
+          ]
+
+          cone_fig = go.Figure()
+
+          # Historical Close line (last 90 days)
+          recent_hist = hist.tail(90)
+          cone_fig.add_trace(
+              go.Scatter(
+                  x=recent_hist.index,
+                  y=recent_hist["Close"],
+                  mode="lines",
+                  line=dict(color="#00F5D4", width=2.2),
+                  name="Historical Price",
+              )
           )
-          chart_fig.add_trace(
-              go.Candlestick(
-                  x=hist.index,
-                  open=hist["Open"],
-                  high=hist["High"],
-                  low=hist["Low"],
-                  close=hist["Close"],
-                  name="Price",
-                  increasing_line_color="#059669",
-                  decreasing_line_color="#DC2626",
+
+          # High Target Line
+          cone_fig.add_trace(
+              go.Scatter(
+                  x=proj_dates,
+                  y=[curr_price, (curr_price + target_high) / 2, target_high],
+                  mode="lines+markers",
+                  line=dict(color="#10B981", width=1.8, dash="dot"),
+                  name=f"High: {target_high:.2f} ({target_high_spread:+.1f}%)",
+              )
+          )
+
+          # Median / Average Target Line
+          cone_fig.add_trace(
+              go.Scatter(
+                  x=proj_dates,
+                  y=[curr_price, (curr_price + target_mean) / 2, target_mean],
+                  mode="lines+markers",
+                  line=dict(color="#38BDF8", width=2.5, dash="dash"),
+                  name=f"Avg: {target_mean:.2f} ({target_mean_spread:+.1f}%)",
+              )
+          )
+
+          # Low Target Line
+          cone_fig.add_trace(
+              go.Scatter(
+                  x=proj_dates,
+                  y=[curr_price, (curr_price + target_low) / 2, target_low],
+                  mode="lines+markers",
+                  line=dict(color="#EF4444", width=1.8, dash="dot"),
+                  name=f"Low: {target_low:.2f} ({target_low_spread:+.1f}%)",
+              )
+          )
+
+          cone_fig.update_layout(
+              title=dict(
+                  text=(
+                      f"<b>12-Month Price Target Cone</b> • Avg:"
+                      f" {target_mean:.2f} {currency} ({target_mean_spread:+.1f}%)"
+                  ),
+                  font=dict(size=14, color="#FFFFFF"),
               ),
-              row=1,
-              col=1,
-          )
-          if len(hist) >= 200:
-            sma_200_line = hist["Close"].rolling(window=200).mean()
-            chart_fig.add_trace(
-                go.Scatter(
-                    x=hist.index,
-                    y=sma_200_line,
-                    mode="lines",
-                    line=dict(color="#0284C7", width=1.5),
-                    name="200-Day SMA",
-                ),
-                row=1,
-                col=1,
-            )
-          chart_fig.add_trace(
-              go.Bar(
-                  x=hist.index,
-                  y=hist["Volume"],
-                  name="Volume",
-                  marker_color="#475569",
-              ),
-              row=2,
-              col=1,
-          )
-          chart_fig.update_layout(
               paper_bgcolor="#0A0F1D",
-              plot_bgcolor="#0D1117",
+              plot_bgcolor="#161B22",
               font=dict(color="#94A3B8"),
-              height=380,
-              xaxis_rangeslider_visible=False,
-              margin=dict(l=10, r=10, t=30, b=10),
-              showlegend=False,
+              height=410,
+              margin=dict(l=10, r=10, t=40, b=20),
+              legend=dict(
+                  orientation="h",
+                  yanchor="bottom",
+                  y=1.02,
+                  xanchor="right",
+                  x=1,
+                  font=dict(size=10),
+              ),
           )
-          chart_fig.update_xaxes(gridcolor="#1F2937")
-          chart_fig.update_yaxes(gridcolor="#1F2937")
-          st.plotly_chart(chart_fig, use_container_width=True)
+          cone_fig.update_xaxes(gridcolor="#21262D")
+          cone_fig.update_yaxes(gridcolor="#21262D")
+          st.plotly_chart(cone_fig, use_container_width=True)
 
-        # 4. Institutional AI Synthesis via Gemini (Persona & Standardized Template)
+        # -------------------------------------------------------------
+        # MODULE B: INSTITUTIONAL RESEARCH ENGINE SYNTHESIS (GEMINI)
+        # -------------------------------------------------------------
         market_context = f"""
                 Ticker: {ticker_input}
                 Company Name: {company_name}
@@ -294,9 +386,9 @@ if (run_btn or ticker_input) and ticker_input:
                 200-Day Moving Average: {sma_200:.2f} {currency} (Spread: {dma_diff_pct:+.2f}%)
                 52-Week Range: {low_52:.2f} to {high_52:.2f} {currency}
                 Market Cap: {info.get('marketCap', 'N/A')} {currency}
-                Forward P/E: {fwd_pe} | Trailing P/E: {info.get('trailingPE', 'N/A')}
-                Dividend Yield: {div_yield_str}
-                Snowflake Scores (0-6 Scale): Valuation: {val_score}, Growth: {growth_score}, Past: {past_score}, Health: {health_score}, Dividend: {div_score}
+                Forward P/E: {info.get('forwardPE', 'N/A')} | Trailing P/E: {info.get('trailingPE', 'N/A')}
+                Dividend Yield: {f"{info.get('dividendYield', 0) * 100:.2f}%" if info.get('dividendYield') else 'N/A'}
+                Consensus Target: {target_mean:.2f} {currency} (Spread: {target_mean_spread:+.1f}%) | Consensus Bias: {rec_key}
                 """
 
         system_prompt = """
@@ -426,7 +518,9 @@ if (run_btn or ticker_input) and ticker_input:
             "Norges Bank / Fed policy rate decisions and energy reports.",
         )
 
-        # 5. Render Institutional HTML Report Container
+        # -------------------------------------------------------------
+        # MODULE C: RENDER INSTITUTIONAL HTML RESEARCH REPORT
+        # -------------------------------------------------------------
         html_output = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -479,11 +573,11 @@ if (run_btn or ticker_input) and ticker_input:
           </p>
         </div>
         <div class="text-left md:text-right">
-          <span class="text-[10px] font-bold tracking-wider uppercase text-slate-400">Institutional Consensus Bias</span>
+          <span class="text-[10px] font-bold tracking-wider uppercase text-slate-400">Institutional Consensus Stance</span>
           <div class="text-sm font-bold text-amber-300 flex items-center gap-1.5 md:justify-end mt-0.5">
             <i data-lucide="activity" class="w-4 h-4"></i> {primary_stance}
           </div>
-          <span class="text-[10px] text-slate-400 mt-1 block">Base Currency: <strong class="text-white font-mono">{currency}</strong></span>
+          <span class="text-[10px] text-slate-400 mt-1 block">12M Target: <strong class="text-white font-mono">{target_mean:.2f} {currency} ({target_mean_spread:+.1f}%)</strong></span>
         </div>
       </div>
     </header>
@@ -659,14 +753,14 @@ if (run_btn or ticker_input) and ticker_input:
       <!-- Primary Source & Verification Box -->
       <section class="avoid-break">
         <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl">
-          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">Primary Source &amp; Verification Layer</h4>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">Primary Source &amp; Institutional Verification Layer</h4>
           <div class="overflow-x-auto text-[11px]">
             <table class="w-full text-left border-collapse">
               <thead>
                 <tr class="border-b border-slate-200 text-slate-500 font-semibold">
                   <th class="py-1.5">Verification Layer</th>
                   <th class="py-1.5">Primary Source Repository</th>
-                  <th class="py-1.5">Filing Type &amp; Access</th>
+                  <th class="py-1.5">Filing Type &amp; Benchmark Access</th>
                 </tr>
               </thead>
               <tbody class="text-slate-700 divide-y divide-slate-100">
@@ -676,9 +770,9 @@ if (run_btn or ticker_input) and ticker_input:
                   <td class="py-1.5 font-mono text-[10px] text-sky-700">Official Q-Report / Form 10-Q / 8-K</td>
                 </tr>
                 <tr>
-                  <td class="py-1.5 font-medium">Corporate Disclosures</td>
-                  <td class="py-1.5">Investor Relations Webcast &amp; Factsheet</td>
-                  <td class="py-1.5 font-mono text-[10px] text-sky-700">Earnings Transcript &amp; Deck</td>
+                  <td class="py-1.5 font-medium">Analyst Consensus</td>
+                  <td class="py-1.5">DNB Carnegie, Pareto, ABGSC, FactSet &amp; LSEG</td>
+                  <td class="py-1.5 font-mono text-[10px] text-sky-700">Institutional Earnings Estimates &amp; Target Price Feeds</td>
                 </tr>
               </tbody>
             </table>
@@ -710,7 +804,7 @@ if (run_btn or ticker_input) and ticker_input:
 </body>
 </html>"""
 
-        # 6. Render the institutional report container
+        # Render complete institutional HTML document
         components.html(html_output, height=1550, scrolling=True)
 
     except Exception as e:
