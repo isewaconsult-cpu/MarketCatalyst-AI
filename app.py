@@ -1,6 +1,4 @@
 import os
-import re
-import socket
 import streamlit as st
 from supabase import create_client, Client
 from google import genai
@@ -29,28 +27,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. CLIENT INITIALIZATION & CLEANING
+# 2. CLIENT INITIALIZATION (DIRECT PUBLIC ENDPOINT)
 # ---------------------------------------------------------
-def clean_supabase_url(raw_input: str) -> str:
-    # Extracts clean https://<project-ref>.supabase.co pattern regardless of formatting errors
-    match = re.search(r"https?://[a-zA-Z0-9\-_]+\.supabase\.co", str(raw_input))
-    if match:
-        return match.group(0)
-    # Fallback to hardcoded verified endpoint if secrets contain syntax corruptions
-    return "https://stpgiquvvvmghmgmypfl.supabase.co"
+SUPABASE_URL = "https://stpgiquvvvmghmgmypfl.supabase.co"
 
-@st.cache_resource
-def init_supabase() -> Client:
-    raw_url = st.secrets.get("supabase", {}).get("url", "https://stpgiquvvvmghmgmypfl.supabase.co")
-    raw_key = st.secrets.get("supabase", {}).get("key", "").strip().strip('"\'')
-    
-    clean_url = clean_supabase_url(raw_url)
-    return create_client(clean_url, raw_key)
+def get_supabase_client() -> Client:
+    # Retrieve key from secrets or fallback
+    raw_key = ""
+    if "supabase" in st.secrets and "key" in st.secrets["supabase"]:
+        raw_key = str(st.secrets["supabase"]["key"]).strip().strip('"\'')
+    elif "SUPABASE_KEY" in st.secrets:
+        raw_key = str(st.secrets["SUPABASE_KEY"]).strip().strip('"\'')
+        
+    return create_client(SUPABASE_URL, raw_key)
 
-try:
-    supabase = init_supabase()
-except Exception as e:
-    st.error(f"Supabase Client Error: {str(e)}")
+supabase = get_supabase_client()
 
 def get_gemini_client():
     api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
@@ -110,7 +101,7 @@ def auth_screen():
                             "password": su_password,
                             "options": {"data": {"full_name": su_name.strip()}}
                         })
-                        st.success("Account created successfully. Please switch to the 'Sign In' tab.")
+                        st.success("Account created successfully. Switch to the 'Sign In' tab to log in.")
                     except Exception as e:
                         st.error(f"Account creation failed: {str(e)}")
 
@@ -151,7 +142,7 @@ def render_terminal():
         info = stock.info
         
         if hist.empty:
-            st.warning(f"No market data located for `{ticker}`. Verify ticker suffix (e.g., `.OL` for Oslo Børs).")
+            st.warning(f"No market data located for `{ticker}`. Verify symbol suffix (e.g. `.OL` for Oslo Børs).")
             return
 
         c1, c2, c3, c4 = st.columns(4)
@@ -189,7 +180,7 @@ def render_terminal():
         )
 
         if st.button("Generate Catalyst Analysis", type="primary"):
-            with st.spinner("Synthesizing multi-source financial telemetry..."):
+            with st.spinner("Synthesizing multi-source financial intelligence..."):
                 client = get_gemini_client()
                 
                 system_instruction = """
@@ -204,12 +195,7 @@ Key Analytical Framework:
 4. Fundamental & Dividend Health: Review revenue/EPS trends, balance sheet strength, dividend sustainability (payout ratios, ex-dividend dates), and capital allocation plans.
 5. Scenario Synthesis: Present balanced bull and bear perspectives, upcoming risk factors, key watchpoints, and relevant date triggers.
 
-Communication Guidelines & Formatting:
-- Clarity & Scannability: Minimize introductory fluff. Jump directly into the analysis using structured bullet points, clear bold sub-headers, and comparison tables where applicable.
-- Currency & Market Precision: Keep currencies consistent and explicit (USD vs. NOK). Clearly distinguish between US market conventions (SEC filings, Fed speak) and Norwegian/Nordic conventions (Euronext Oslo, Norges Bank).
-- Data Integrity: Never guess or hallucinate financial metrics, stock quotes, or historical dates.
-- Professional Tone: Maintain an objective, institutional, and analytically grounded tone.
-- Financial Compliance: Provide market intelligence and educational analysis; never deliver direct, personalized investment advice.
+Format with bold headers, concise bullet points, and scannable data. Maintain institutional rigor and objectivity. Provide market intelligence and educational analysis without personalized investment advice.
 """
 
                 prompt = f"""
@@ -218,8 +204,8 @@ Analyze the following security and event context according to the 5-step Analyti
 - Sector / Industry: {info.get('sector', 'N/A')} / {info.get('industry', 'N/A')}
 - Market Universe: {market_universe}
 - Current Reference Price: {current_price:.2f} {currency}
-- Historical Trailing P/E: {info.get('trailingPE', 'N/A')}
-- User Context / Target Trigger: {analysis_prompt}
+- Trailing P/E: {info.get('trailingPE', 'N/A')}
+- Context Trigger: {analysis_prompt}
 """
 
                 response = client.models.generate_content(
