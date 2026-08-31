@@ -72,8 +72,7 @@ with col2:
 
 if run_btn and ticker_input:
   with st.spinner(
-      f"Ingesting market telemetry & synthesizing research for"
-      f" {ticker_input}..."
+      f"Ingesting live telemetry & synthesizing research for {ticker_input}..."
   ):
     try:
       stock = yf.Ticker(ticker_input)
@@ -92,6 +91,7 @@ if run_btn and ticker_input:
             "currency", "NOK" if ticker_input.endswith(".OL") else "USD"
         )
         forward_pe = info.get("forwardPE", "N/A")
+        trailing_pe = info.get("trailingPE", "N/A")
         div_yield = (
             f"{info.get('dividendYield', 0) * 100:.2f}%"
             if info.get("dividendYield")
@@ -108,6 +108,10 @@ if run_btn and ticker_input:
             if len(hist) >= 200
             else "N/A"
         )
+        target_mean = info.get("targetMeanPrice", "N/A")
+        recommendation_key = info.get(
+            "recommendationKey", "N/A"
+        ).upper()
 
         market_context = f"""
                 Ticker: {ticker_input}
@@ -116,32 +120,52 @@ if run_btn and ticker_input:
                 Current Price: {curr_price} {currency}
                 52-Week Range: {low_52} - {high_52} {currency}
                 200-Day Moving Average: {sma_200} {currency}
-                Forward P/E: {forward_pe}
+                Trailing P/E: {trailing_pe} | Forward P/E: {forward_pe}
                 Dividend Yield: {div_yield}
+                Consensus Recommendation: {recommendation_key} | Mean Target: {target_mean} {currency}
                 Market Cap: {info.get('marketCap', 'N/A')} {currency}
                 """
 
         client = genai.Client(api_key=GEMINI_API_KEY)
         system_prompt = """
-                You are IsewaInvest AI, an elite Equity Research Analyst covering US markets (S&P 500, NASDAQ) and Norwegian markets (OSEBX).
-                Structure your evaluation strictly using these 5 institutional steps:
-                **1. Catalyst Breakdown**
-                **2. Historical Context & Price Action**
-                **3. Macro & Sector Drivers**
-                **4. Fundamental & Dividend Health**
-                **5. Scenario Synthesis** (Bull/Bear cases, key risk triggers, and target price levels)
-                Distinguish clearly between USD and NOK. Maintain an institutional, concise, and scannable format.
+                You are MarketCatalyst AI, an elite Equity Research Analyst covering US markets (S&P 500, NASDAQ) and Norwegian markets (Oslo Børs / OSEBX).
+                Structure your evaluation strictly using the following 5 institutional modules:
+
+                ### 1. Market Catalyst & Newsflash Classification
+                - Tag with: [Earnings / Guidance], [Capital Allocation], [Regulatory & Contracts], or [Macro / Commodity Trigger].
+                - Summarize core catalysts and expectation gaps.
+
+                ### 2. Institutional Consensus & Valuation Bias
+                - Provide visual bias tag (🟢 OVERWEIGHT / BUY BIAS, 🟡 NEUTRAL / HOLD BIAS, or 🔴 UNDERWEIGHT / REDUCE BIAS).
+                - Consensus Barometer: Target price spread and analyst profile.
+
+                ### 3. High-Signal Quantitative Metrics
+                - Earnings Revision Momentum (30/90 day trends).
+                - Multiples vs. 5-Year Medians (NTM P/E, EV/EBITDA, P/FCF).
+                - Balance sheet leverage (Net Debt / EBITDA, Interest Coverage).
+                - Macro & FX Sensitivity (Brent delta for OSEBX; DXY / 10Y Yields for US).
+
+                ### 4. Corporate Actions, Dividend & Dilution Analytics
+                - Dividend CAGR (3/5/10 yr) & FCF Payout Coverage.
+                - Payout structure (Nordic base + extraordinary vs. US quarterly).
+                - 5-year share count / net dilution trajectory.
+
+                ### 5. Primary Source & Verification Box
+                - Structured markdown table citing regulatory filings (SEC EDGAR vs. Euronext Oslo Newsweb), IR portals, and earnings transcripts.
+
+                Strictly distinguish between USD and NOK. Jump directly into the analysis without introductory conversational filler.
                 """
 
         response = client.models.generate_content(
-            model="gemini-3.6-flash", contents=[system_prompt, market_context]
+            model="gemini-2.5-flash",
+            contents=[system_prompt, market_context],
         )
 
         st.success(f"Report Generated: {info.get('longName', ticker_input)}")
         st.markdown("---")
         st.markdown(response.text)
 
-        # Institutional Compliance & Legal Scaffolding
+        # Institutional Compliance & Legal Disclaimer Scaffolding
         st.markdown("---")
         with st.expander("⚖️ Important Information & Research Disclaimer"):
           st.markdown(DISCLAIMER_TEXT)
