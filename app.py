@@ -38,8 +38,7 @@ with col2:
 
 if run_btn and ticker_input:
   with st.spinner(
-      f"Ingesting market telemetry & synthesizing research for"
-      f" {ticker_input}..."
+      f"Ingesting live telemetry & synthesizing research for {ticker_input}..."
   ):
     try:
       # 1. Fetch live market telemetry
@@ -101,10 +100,10 @@ if run_btn and ticker_input:
                 Distinguish clearly between USD and NOK. Maintain an institutional, concise, and scannable format.
                 """
 
-       response = client.models.generate_content(
-    model="gemini-3.6-flash",
-    contents=[system_prompt, market_context],
-)
+        response = client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=[system_prompt, market_context],
+        )
 
         st.success(f"Report Generated: {info.get('longName', ticker_input)}")
         st.markdown("---")
